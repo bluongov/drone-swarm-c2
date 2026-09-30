@@ -1,0 +1,1277 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SWARM C2 // Mission Control</title>
+<style>
+:root{
+  --c:#3ff0ff; --c2:#1f93a6; --g:#4dff9a; --y:#ffcc33; --r:#ff4d5e; --p:#b58cff;
+  --bg:rgba(4,14,22,.74); --line:rgba(63,240,255,.22);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:#02070c;color:var(--c);
+  font-family:'JetBrains Mono','Fira Code','Cascadia Code',Consolas,monospace;font-size:12px}
+#scene{position:fixed;inset:0}
+#fx{position:fixed;inset:0;pointer-events:none;z-index:1;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.13) 0 1px,transparent 1px 3px),
+             radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,.65))}
+#hud{position:fixed;inset:0;z-index:2;pointer-events:none;display:grid;
+  grid-template-columns:300px 1fr 300px;grid-template-rows:46px 1fr 175px;gap:10px;padding:10px}
+.panel{background:var(--bg);border:1px solid var(--line);backdrop-filter:blur(4px);
+  position:relative;padding:9px 10px;pointer-events:auto;overflow:hidden}
+.panel::before,.panel::after{content:'';position:absolute;width:10px;height:10px;border:2px solid var(--c)}
+.panel::before{top:-1px;left:-1px;border-right:none;border-bottom:none}
+.panel::after{bottom:-1px;right:-1px;border-left:none;border-top:none}
+.panel.clear{background:transparent;backdrop-filter:none}
+.title{font-size:10px;letter-spacing:.2em;color:var(--c2);margin-bottom:7px;display:flex;justify-content:space-between;white-space:nowrap}
+.title span:first-child{color:var(--c)}
+.title span:first-child::before{content:'▮ ';color:var(--g)}
+.dim{color:var(--c2)}
+
+#top{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;padding:0 16px}
+.brand{font-size:14px;letter-spacing:.14em;white-space:nowrap}
+.brand b{color:#fff}
+.logo{color:var(--g);margin-right:6px;display:inline-block;animation:spin 6s linear infinite}
+.mode{letter-spacing:.15em;white-space:nowrap}
+.mode b{color:#fff;font-size:15px;letter-spacing:.22em;margin:0 10px}
+.tag{border:1px solid var(--g);color:var(--g);padding:1px 6px;font-size:10px;letter-spacing:.15em}
+.tag.off{border-color:var(--c2);color:var(--c2)}
+.right{white-space:nowrap}
+.right span{margin-left:18px}
+.right b{color:#fff;font-weight:normal}
+.live i{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--r);margin-right:6px;
+  box-shadow:0 0 8px var(--r);animation:blink 1s steps(2) infinite}
+
+.col{display:flex;flex-direction:column;gap:10px;min-height:0}
+#left{grid-column:1;grid-row:2}
+#right{grid-column:3;grid-row:2}
+#center{grid-column:2;grid-row:2;position:relative}
+.grow{flex:1;min-height:0;display:flex;flex-direction:column}
+
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.stat{border:1px solid var(--line);padding:5px 7px;background:rgba(63,240,255,.03)}
+.stat .l{font-size:9px;color:var(--c2);letter-spacing:.14em}
+.stat .v{font-size:18px;color:#fff;margin-top:2px}
+.stat .v small{font-size:10px;color:var(--c2)}
+
+#fleet{display:grid;grid-template-columns:repeat(3,1fr);gap:3px 6px;overflow:auto;scrollbar-width:none;align-content:start}
+#fleet::-webkit-scrollbar{display:none}
+.cell{display:flex;align-items:center;gap:5px;font-size:10px;padding:2px 4px;border-left:2px solid var(--c);cursor:pointer;color:#cfefff}
+.cell:hover{background:rgba(63,240,255,.08)}
+.cell .bar{flex:1;height:5px;background:rgba(63,240,255,.12);position:relative}
+.cell .bar i{position:absolute;left:0;top:0;bottom:0;background:var(--c)}
+.cell .st{width:24px;text-align:right;font-size:9px;color:var(--c2)}
+.cell.RTB,.cell.LANDING{border-color:var(--y)} .cell.RTB .bar i,.cell.LANDING .bar i{background:var(--y)}
+.cell.CHARGING{border-color:var(--g)} .cell.CHARGING .bar i{background:var(--g)}
+.cell.IDLE,.cell.LAUNCH{border-color:#fff} .cell.IDLE .bar i,.cell.LAUNCH .bar i{background:#fff}
+.cell.low .bar i{background:var(--r)}
+.cell.focus{background:rgba(63,240,255,.18);outline:1px solid var(--c)}
+
+#map{width:min(100%,26vh);aspect-ratio:1;display:block;margin:0 auto}
+#fpvp .title{background:var(--bg);margin:-9px -10px 0;padding:9px 10px 7px}
+#fpv{position:relative;height:clamp(100px,15vh,170px);border:1px solid var(--line);margin-top:0}
+#fpv .xh{position:absolute;left:50%;top:50%;width:36px;height:36px;margin:-18px 0 0 -18px;border:1px solid rgba(255,255,255,.55);border-radius:50%}
+#fpv .xh::before,#fpv .xh::after{content:'';position:absolute;background:rgba(255,255,255,.55)}
+#fpv .xh::before{left:-14px;right:-14px;top:50%;height:1px}
+#fpv .xh::after{top:-14px;bottom:-14px;left:50%;width:1px}
+#fpv .rec{position:absolute;top:5px;left:7px;font-size:10px;color:#fff;text-shadow:0 0 4px #000}
+#fpv .rec i{color:var(--r);font-style:normal;animation:blink 1s steps(2) infinite}
+#fpv .fi{position:absolute;bottom:5px;left:7px;right:7px;font-size:10px;color:#fff;text-shadow:0 0 4px #000;display:flex;justify-content:space-between}
+
+.focus{display:flex;gap:10px}
+#horizon{width:118px;height:118px;flex:none}
+#fvals{flex:1;display:grid;grid-template-columns:auto 1fr;gap:1px 8px;font-size:11px;align-content:start}
+#fvals .k{color:var(--c2)} #fvals .v{color:#fff;text-align:right}
+
+#term{grid-column:1/3;grid-row:3;display:flex;flex-direction:column}
+#log{flex:1;overflow:hidden;font-size:11px;line-height:1.45}
+.ln{white-space:nowrap;animation:fade .35s ease-out}
+.ts{color:#2a6f7c;margin-right:10px}
+.lv{display:inline-block;width:5ch;margin-right:8px}
+.msg{color:#bfefff}
+.msg b{color:#fff;font-weight:normal;border-bottom:1px dotted var(--c)}
+.ln.info .lv{color:var(--c)} .ln.ok .lv{color:var(--g)} .ln.sys .lv{color:var(--p)}
+.ln.warn .lv{color:var(--y)} .ln.warn .msg{color:#ffe7a3}
+.ln.err .lv,.ln.err .msg{color:var(--r)}
+.cursor-line{display:flex;align-items:center}
+.prompt{color:var(--g)!important;white-space:nowrap}
+#cmd{flex:1;min-width:0;background:transparent;border:none;outline:none;color:#fff;font:inherit;caret-color:var(--c)}
+#cmd::placeholder{color:#1f5f6c}
+.ln.cmd .lv{color:#fff} .ln.cmd .msg{color:#fff}
+#term{cursor:text}
+
+#charts{grid-column:3;grid-row:3;display:flex;flex-direction:column}
+#chart{flex:1;width:100%;min-height:0;display:block}
+.legend i{font-style:normal;margin-left:8px}
+
+#hint{position:absolute;bottom:2px;left:50%;transform:translateX(-50%);font-size:10px;color:var(--c2);
+  letter-spacing:.08em;white-space:nowrap;transition:opacity 3s;text-shadow:0 0 4px #000}
+#banner{position:absolute;top:18%;left:50%;transform:translateX(-50%);text-align:center;opacity:0;
+  transition:opacity .4s;pointer-events:none;white-space:nowrap}
+#banner .a{font-size:11px;letter-spacing:.5em;color:var(--y)}
+#banner .b{font-size:30px;letter-spacing:.35em;color:#fff;text-shadow:0 0 18px var(--c);margin-top:6px}
+#banner.show{opacity:1}
+#tag3d{position:fixed;z-index:2;pointer-events:none;font-size:10px;color:#fff;padding:3px 7px;
+  border-left:2px solid var(--c);background:rgba(4,14,22,.8);white-space:pre;line-height:1.35}
+body.nohud #hud, body.nohud #tag3d{display:none}
+
+@keyframes blink{50%{opacity:0}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fade{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+<div id="scene"></div>
+<div id="fx"></div>
+<div id="tag3d"></div>
+
+<div id="hud">
+  <header class="panel" id="top">
+    <div class="brand"><span class="logo">◈</span>PROJECT <b id="pname"></b> <span class="dim">// AUTONOMOUS SWARM C2</span></div>
+    <div class="mode">MODE<b id="mode">PATROL</b><span id="auto" class="tag">AUTO</span></div>
+    <div class="right">
+      <span class="live"><i></i>LIVE</span>
+      <span>UTC <b id="clock">--:--:--</b></span>
+      <span>T+ <b id="tplus">00:00:00</b></span>
+      <span class="dim" id="fps"></span>
+    </div>
+  </header>
+
+  <aside class="col" id="left">
+    <section class="panel">
+      <div class="title"><span>SWARM STATUS</span><span id="nodes"></span></div>
+      <div class="stats">
+        <div class="stat"><div class="l">ACTIVE</div><div class="v" id="sAct">0</div></div>
+        <div class="stat"><div class="l">RTB</div><div class="v" id="sRtb">0</div></div>
+        <div class="stat"><div class="l">CHARGING</div><div class="v" id="sChg">0</div></div>
+        <div class="stat"><div class="l">AVG BAT</div><div class="v" id="sBat">0<small>%</small></div></div>
+        <div class="stat"><div class="l">MESH LINK</div><div class="v" id="sLink">0<small>%</small></div></div>
+        <div class="stat"><div class="l">COVERAGE</div><div class="v" id="sCov">0<small>%</small></div></div>
+      </div>
+    </section>
+    <section class="panel grow">
+      <div class="title"><span>FLEET MATRIX</span><span>BAT · STATE</span></div>
+      <div id="fleet"></div>
+    </section>
+  </aside>
+
+  <div id="center">
+    <div id="banner"><div class="a">▲ RETASKING SWARM ▲</div><div class="b" id="bannerTxt">PATROL</div></div>
+    <div id="hint">[ENTER] terminal · [CLICK] waypoint/objetivo · [1-4] modo · [C] cámara · [A] auto · [H] HUD · [F] pantalla completa · <span id="cursor">—</span></div>
+  </div>
+
+  <aside class="col" id="right">
+    <section class="panel">
+      <div class="title"><span>TACTICAL MAP</span><span id="mapInfo">R 400m</span></div>
+      <canvas id="map"></canvas>
+    </section>
+    <section class="panel clear" id="fpvp">
+      <div class="title"><span>FPV FEED</span><span id="fpvId">—</span></div>
+      <div id="fpv"><div class="xh"></div><div class="rec"><i>●</i> REC · EO/IR</div><div class="fi"><span id="fpvL"></span><span id="fpvR"></span></div></div>
+    </section>
+    <section class="panel grow">
+      <div class="title"><span>FOCUS UNIT</span><span id="fid">—</span></div>
+      <div class="focus"><canvas id="horizon"></canvas><div id="fvals"></div></div>
+    </section>
+  </aside>
+
+  <section class="panel" id="term">
+    <div class="title"><span>SYSTEM LOG</span><span>tail -f /var/log/swarm/c2.log</span></div>
+    <div id="log"></div>
+  </section>
+
+  <section class="panel" id="charts">
+    <div class="title"><span>TELEMETRY</span><span class="legend"><i style="color:var(--c)">THRPT</i><i style="color:var(--g)">ALT</i><i style="color:var(--y)">LAT</i></span></div>
+    <canvas id="chart"></canvas>
+  </section>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+
+// ================= CONFIG =================
+const params = new URLSearchParams(location.search);
+let PROJECT = (params.get('name') || 'HALCYON').toUpperCase().slice(0, 24);
+let N = Math.min(150, Math.max(1, parseInt(params.get('drones')) || 60));
+let QUALITY = params.get('quality') === 'low' ? 'low' : 'high';
+const LAT0 = parseFloat(params.get('lat')) || 39.4699;   // Valencia por defecto
+const LON0 = parseFloat(params.get('lon')) || -0.3763;
+const MAXS = 20, MAXF = 28, R_NEI = 16, R_SEP = 7;
+const MODES = ['PATROL', 'ORBIT', 'FORMATION', 'SCAN'];
+const MODE_W = {
+  PATROL:    { sep: 2.2, ali: 1.0, coh: 0.8, goal: 0.7, arrive: 1,  minS: 7 },
+  ORBIT:     { sep: 2.4, ali: 0.2, coh: 0.0, goal: 1.6, arrive: 18, minS: 0 },
+  FORMATION: { sep: 2.2, ali: 0.3, coh: 0.0, goal: 1.8, arrive: 18, minS: 0 },
+  SCAN:      { sep: 2.2, ali: 0.2, coh: 0.0, goal: 1.8, arrive: 18, minS: 0 },
+};
+const STATE_COLOR = { ACTIVE: 0x3ff0ff, RTB: 0xffcc33, LANDING: 0xffcc33, CHARGING: 0x4dff9a, LAUNCH: 0xffffff, IDLE: 0x557788 };
+const STATE_SHORT = { ACTIVE: 'ACT', RTB: 'RTB', LANDING: 'LND', CHARGING: 'CHG', LAUNCH: 'LCH', IDLE: 'IDL' };
+
+const $ = s => document.querySelector(s);
+const rand = (a, b) => a + Math.random() * (b - a);
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const pad2 = n => String(n).padStart(2, '0');
+const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
+function limit(v, m) { const l = v.length(); if (l > m) v.multiplyScalar(m / l); return v; }
+function lerpAngle(a, b, t) { let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI; if (d < -Math.PI) d += Math.PI * 2; return a + d * t; }
+const hdgOf = d => Math.round((Math.atan2(d.vel.x, -d.vel.z) * 180 / Math.PI + 360) % 360);
+$('#pname').textContent = PROJECT;
+document.title = `${PROJECT} // SWARM C2`;
+
+// ================= RENDERER / SCENE =================
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(QUALITY === 'low' ? 1 : Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+$('#scene').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x02070c);
+scene.fog = new THREE.FogExp2(0x02070c, 0.0026);
+
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.5, 2500);
+camera.position.set(170, 115, 170);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.35;
+controls.maxPolarAngle = Math.PI * 0.47;
+controls.minDistance = 30;
+controls.maxDistance = 480;
+controls.target.set(0, 25, 0);
+
+const fpvCam = new THREE.PerspectiveCamera(70, 1.6, 0.3, 900);
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.85, 0.5, 0.18);
+composer.addPass(bloom);
+bloom.enabled = QUALITY !== 'low';
+composer.addPass(new OutputPass());
+
+scene.add(new THREE.AmbientLight(0x335566, 0.9));
+const sun = new THREE.DirectionalLight(0x88ccff, 1.1);
+sun.position.set(100, 200, 50);
+scene.add(sun);
+
+// ================= TERRAIN =================
+function hgt(x, z) {
+  const m = THREE.MathUtils.smoothstep(Math.hypot(x, z), 170, 320);
+  return m * (Math.sin(x * 0.02) * Math.cos(z * 0.025) * 18 + Math.sin(x * 0.05 + z * 0.03) * 6 + 16);
+}
+{
+  const tg = new THREE.PlaneGeometry(1000, 1000, 130, 130);
+  tg.rotateX(-Math.PI / 2);
+  const p = tg.attributes.position;
+  for (let i = 0; i < p.count; i++) p.setY(i, hgt(p.getX(i), p.getZ(i)));
+  tg.computeVertexNormals();
+  scene.add(new THREE.Mesh(tg, new THREE.MeshBasicMaterial({ color: 0x03101a, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 })));
+  scene.add(new THREE.Mesh(tg, new THREE.MeshBasicMaterial({ color: 0x0d5566, wireframe: true, transparent: true, opacity: 0.32 })));
+}
+
+// ================= CITY / OBSTACLES =================
+const obstacles = [];
+const beacons = [];
+{
+  const bMat = new THREE.MeshStandardMaterial({ color: 0x07141d, roughness: 0.9, metalness: 0.2, transparent: true, opacity: 0.92 });
+  const eMat = new THREE.LineBasicMaterial({ color: 0x2bd4ff, transparent: true, opacity: 0.55 });
+  const beaconGeo = new THREE.SphereGeometry(0.7, 8, 8);
+  let tries = 0;
+  while (obstacles.length < 28 && tries++ < 800) {
+    const x = rand(-160, 160), z = rand(-160, 160);
+    if (Math.hypot(x, z) < 48) continue;
+    const w = rand(8, 20), d = rand(8, 20), h = rand(14, 60), r = Math.hypot(w, d) / 2;
+    if (obstacles.some(o => Math.hypot(o.x - x, o.z - z) < o.r + r + 8)) continue;
+    const g = new THREE.BoxGeometry(w, h, d); g.translate(0, h / 2, 0);
+    const m = new THREE.Mesh(g, bMat); m.position.set(x, 0, z); scene.add(m);
+    const e = new THREE.LineSegments(new THREE.EdgesGeometry(g), eMat); e.position.set(x, 0, z); scene.add(e);
+    const bc = new THREE.Mesh(beaconGeo, new THREE.MeshBasicMaterial({ color: 0xff3344, transparent: true }));
+    bc.position.set(x, h + 0.9, z); bc.userData.ph = Math.random() * 6; scene.add(bc); beacons.push(bc);
+    obstacles.push({ x, z, r, w, d, h, type: 'BLD', name: 'STRUCT-' + pad2(obstacles.length + 1) });
+  }
+  // No-fly zones
+  const nfzMat = new THREE.MeshBasicMaterial({ color: 0xff3344, transparent: true, opacity: 0.05, side: THREE.DoubleSide, depthWrite: false });
+  const nfzLine = new THREE.LineBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0.6 });
+  for (let k = 0; k < 2; k++) {
+    let x, z, r, ok = false, t = 0;
+    while (!ok && t++ < 200) {
+      const a = rand(0, Math.PI * 2), R = rand(110, 165);
+      x = Math.cos(a) * R; z = Math.sin(a) * R; r = rand(18, 26);
+      ok = !obstacles.some(o => Math.hypot(o.x - x, o.z - z) < o.r + r + 4);
+    }
+    const h = 140;
+    const g = new THREE.CylinderGeometry(r, r, h, 40, 1, true); g.translate(0, h / 2, 0);
+    const m = new THREE.Mesh(g, nfzMat); m.position.set(x, 0, z); scene.add(m);
+    for (let yy = 0; yy <= h; yy += 20) {
+      const pts = []; for (let i = 0; i <= 48; i++) { const a = i / 48 * Math.PI * 2; pts.push(V3(x + Math.cos(a) * r, yy + 0.2, z + Math.sin(a) * r)); }
+      scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), nfzLine));
+    }
+    obstacles.push({ x, z, r, h, type: 'NFZ', name: 'NFZ-' + 'AB'[k] });
+  }
+}
+const buildings = obstacles.filter(o => o.type === 'BLD');
+
+// ================= BASE / PADS =================
+const pads = [], PSP = 4.5;
+let BASE_R = 10, padMesh = null, baseRing = null;
+const padGeo = new THREE.PlaneGeometry(3.2, 3.2).rotateX(-Math.PI / 2);
+const padMat = new THREE.MeshBasicMaterial({ color: 0x0f5d6e, transparent: true, opacity: 0.75 });
+const baseRingMat = new THREE.MeshBasicMaterial({ color: 0x4dff9a, transparent: true, opacity: 0.7 });
+function buildPads(n) {
+  const cols = Math.ceil(Math.sqrt(n)), rows = Math.ceil(n / cols);
+  pads.length = 0;
+  for (let i = 0; i < n; i++) pads.push(V3((i % cols - (cols - 1) / 2) * PSP, 0.6, (Math.floor(i / cols) - (rows - 1) / 2) * PSP));
+  BASE_R = Math.max(cols, rows) * PSP * 0.75 + 4;
+  if (padMesh) { scene.remove(padMesh); padMesh.dispose(); }
+  padMesh = new THREE.InstancedMesh(padGeo, padMat, n);
+  const m4 = new THREE.Matrix4();
+  pads.forEach((p, i) => { m4.makeTranslation(p.x, 0.08, p.z); padMesh.setMatrixAt(i, m4); });
+  scene.add(padMesh);
+  if (baseRing) { scene.remove(baseRing); baseRing.geometry.dispose(); }
+  baseRing = new THREE.Mesh(new THREE.RingGeometry(BASE_R, BASE_R + 0.7, 72).rotateX(-Math.PI / 2), baseRingMat);
+  baseRing.position.y = 0.1; scene.add(baseRing);
+}
+buildPads(N);
+
+// ================= MARKERS =================
+const routeGroup = new THREE.Group(); scene.add(routeGroup);
+const orbitMarker = new THREE.Group(); scene.add(orbitMarker);
+{
+  const g1 = new THREE.RingGeometry(10, 10.8, 64); g1.rotateX(-Math.PI / 2);
+  const g2 = new THREE.RingGeometry(16, 16.4, 6); g2.rotateX(-Math.PI / 2);
+  const mat = new THREE.MeshBasicMaterial({ color: 0xff9f33, transparent: true, opacity: 0.8, side: THREE.DoubleSide });
+  orbitMarker.add(new THREE.Mesh(g1, mat), new THREE.Mesh(g2, mat));
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 90, 8), new THREE.MeshBasicMaterial({ color: 0xff9f33, transparent: true, opacity: 0.5 }));
+  beam.position.y = 45; orbitMarker.add(beam);
+}
+const leaderMarker = new THREE.Mesh(new THREE.OctahedronGeometry(2.2), new THREE.MeshBasicMaterial({ color: 0xb58cff, wireframe: true }));
+scene.add(leaderMarker);
+const scanBand = new THREE.Mesh(new THREE.PlaneGeometry(340, 3).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x4dff9a, transparent: true, opacity: 0.55, depthWrite: false }));
+scanBand.position.y = 0.3; scene.add(scanBand);
+const scanWall = new THREE.Mesh(new THREE.PlaneGeometry(340, 70), new THREE.MeshBasicMaterial({ color: 0x4dff9a, transparent: true, opacity: 0.035, side: THREE.DoubleSide, depthWrite: false }));
+scene.add(scanWall);
+
+const hoverRing = new THREE.Mesh(new THREE.RingGeometry(3, 3.5, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 }));
+hoverRing.visible = false; scene.add(hoverRing);
+const ripples = [];
+function ripple(p, color = 0xffffff) {
+  const m = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 64).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1, side: THREE.DoubleSide }));
+  m.position.set(p.x, 0.4, p.z); scene.add(m); ripples.push({ m, t: 0 });
+}
+
+// focus visuals
+const focusRing = new THREE.Mesh(new THREE.RingGeometry(4.2, 4.6, 4, 1, Math.PI / 4), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
+scene.add(focusRing);
+const coneGeo = new THREE.ConeGeometry(1, 1, 32, 1, true); coneGeo.translate(0, -0.5, 0);
+const focusCone = new THREE.Mesh(coneGeo, new THREE.MeshBasicMaterial({ color: 0x3ff0ff, transparent: true, opacity: 0.07, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+scene.add(focusCone);
+const footRing = new THREE.Mesh(new THREE.RingGeometry(0.92, 1, 48).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x3ff0ff, transparent: true, opacity: 0.8 }));
+scene.add(footRing);
+
+// ================= DRONES =================
+const droneGeo = (() => {
+  const body = new THREE.BoxGeometry(1.6, 0.5, 2.2);
+  const a1 = new THREE.BoxGeometry(4.3, 0.18, 0.25); a1.rotateY(Math.PI / 4);
+  const a2 = new THREE.BoxGeometry(4.3, 0.18, 0.25); a2.rotateY(-Math.PI / 4);
+  const cam = new THREE.BoxGeometry(0.6, 0.45, 0.5); cam.translate(0, -0.45, 0.8);
+  return mergeGeometries([body, a1, a2, cam]);
+})();
+const rotorGeo = (() => {
+  const g = [];
+  for (const [x, z] of [[1.52, 1.52], [-1.52, 1.52], [1.52, -1.52], [-1.52, -1.52]]) {
+    const c = new THREE.CylinderGeometry(1.15, 1.15, 0.04, 20); c.translate(x, 0.2, z); g.push(c);
+  }
+  return mergeGeometries(g);
+})();
+const bodyMat = new THREE.MeshStandardMaterial({ color: 0x1d2c36, metalness: 0.7, roughness: 0.35, emissive: 0x06202a });
+const rotorMat = new THREE.MeshBasicMaterial({ color: 0x7ff8ff, transparent: true, opacity: 0.12, depthWrite: false });
+const ledGeo = new THREE.SphereGeometry(0.32, 8, 8);
+const TL = 40;
+
+// temp vectors
+const _sep = V3(), _ali = V3(), _coh = V3(), _des = V3(), _acc = V3(), _d = V3(), _g = V3();
+
+let T = 0, mode = 'PATROL', neiSum = 0, neiCnt = 0;
+
+class Drone {
+  constructor(i, delay) {
+    this.i = i;
+    this.id = 'UAV-' + pad2(i + 1);
+    this.pad = pads[i];
+    this.pos = this.pad.clone();
+    this.vel = V3(); this.lastAcc = V3(); this.goal = V3(0, 40, 0);
+    this.state = 'IDLE';
+    this.launchDelay = delay ?? 0.8 + i * 0.12;
+    this.battery = rand(45, 100);
+    this.drain = rand(0.32, 0.6);
+    this.link = 99; this.phase = rand(0, Math.PI * 2);
+    this.yaw = rand(0, Math.PI * 2); this.pitch = 0; this.roll = 0;
+    this.slot = 0; this.nfzT = -99; this.temp = rand(34, 40);
+
+    this.group = new THREE.Group();
+    this.group.add(new THREE.Mesh(droneGeo, bodyMat));
+    this.group.add(new THREE.Mesh(rotorGeo, rotorMat));
+    this.ledMat = new THREE.MeshBasicMaterial({ color: STATE_COLOR.IDLE });
+    const led = new THREE.Mesh(ledGeo, this.ledMat); led.position.set(0, 0.1, 1.2); this.group.add(led);
+    this.strobeMat = new THREE.MeshBasicMaterial({ color: 0xff2233 });
+    const st = new THREE.Mesh(ledGeo, this.strobeMat); st.position.set(0, 0.15, -1.2); this.group.add(st);
+    this.group.scale.setScalar(1.25);
+    scene.add(this.group);
+
+    const tp = new Float32Array(TL * 3), tc = new Float32Array(TL * 3);
+    for (let k = 0; k < TL; k++) {
+      tp.set([this.pos.x, this.pos.y, this.pos.z], k * 3);
+      const f = Math.pow(1 - k / TL, 1.6);
+      tc.set([0.25 * f, 0.94 * f, 1.0 * f], k * 3);
+    }
+    const tg = new THREE.BufferGeometry();
+    tg.setAttribute('position', new THREE.BufferAttribute(tp, 3));
+    tg.setAttribute('color', new THREE.BufferAttribute(tc, 3));
+    this.trail = new THREE.Line(tg, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }));
+    this.trail.frustumCulled = false;
+    scene.add(this.trail);
+  }
+
+  setState(s) { this.state = s; this.ledMat.color.setHex(STATE_COLOR[s]); }
+
+  dispose() {
+    scene.remove(this.group, this.trail);
+    this.ledMat.dispose(); this.strobeMat.dispose();
+    this.trail.geometry.dispose(); this.trail.material.dispose();
+  }
+
+  update(dt, flying) {
+    switch (this.state) {
+      case 'IDLE':
+        this.launchDelay -= dt;
+        if (this.launchDelay <= 0) this.setState('LAUNCH');
+        break;
+      case 'LAUNCH':
+        this.vel.set(0, 9, 0);
+        this.pos.addScaledVector(this.vel, dt);
+        this.battery -= dt * 0.8;
+        if (this.pos.y > 24) { this.setState('ACTIVE'); this.vel.set(rand(-4, 4), 2, rand(-4, 4)); }
+        break;
+      case 'CHARGING':
+        this.vel.set(0, 0, 0);
+        this.battery = Math.min(100, this.battery + dt * 8);
+        this.ledMat.color.setHex(Math.sin(T * 4 + this.phase) > 0 ? 0x4dff9a : 0x1b5a3a);
+        if (this.battery >= 100) { this.setState('LAUNCH'); log('ok', `${this.id} recharge complete (100%) · relaunching`); }
+        break;
+      case 'LANDING':
+        this.pos.x += (this.pad.x - this.pos.x) * Math.min(1, dt * 3);
+        this.pos.z += (this.pad.z - this.pos.z) * Math.min(1, dt * 3);
+        this.vel.set(0, -6, 0);
+        this.pos.y -= 6 * dt;
+        if (this.pos.y <= this.pad.y) { this.pos.y = this.pad.y; this.setState('CHARGING'); log('ok', `${this.id} touchdown on PAD-${pad2(this.i + 1)} · charging`); }
+        break;
+      case 'ACTIVE':
+      case 'RTB':
+        this.flock(dt, flying);
+        this.battery -= dt * this.drain * (this.state === 'RTB' ? 0.6 : 1);
+        break;
+    }
+    this.battery = Math.max(0, this.battery);
+    if (this.state === 'ACTIVE' && this.battery < 15) {
+      this.setState('RTB');
+      log('warn', `${this.id} battery ${this.battery.toFixed(1)}% · RTB authorized → PAD-${pad2(this.i + 1)}`);
+    }
+    const dist = Math.hypot(this.pos.x, this.pos.z);
+    this.link = clamp(this.link + (clamp(100 - dist * 0.09 + Math.sin(T * 0.7 + this.phase) * 4, 40, 100) - this.link) * dt * 2, 0, 100);
+    this.temp += ((this.state === 'ACTIVE' ? 44 : this.state === 'CHARGING' ? 36 : 40) + Math.sin(T + this.phase) * 2 - this.temp) * dt * 0.2;
+    this.orient(dt);
+    this.updateTrail();
+  }
+
+  flock(dt, flying) {
+    const rtb = this.state === 'RTB';
+    const W = rtb ? { sep: 2.2, ali: 0, coh: 0, goal: 1.6, arrive: 25, minS: 0 } : MODE_W[mode];
+    _sep.set(0, 0, 0); _ali.set(0, 0, 0); _coh.set(0, 0, 0);
+    let nA = 0, nS = 0;
+    for (const o of flying) {
+      if (o === this) continue;
+      _d.subVectors(this.pos, o.pos);
+      const dist = _d.length();
+      if (dist < R_NEI) {
+        if (!rtb && o.state === 'ACTIVE') { _ali.add(o.vel); _coh.add(o.pos); nA++; }
+        if (dist < R_SEP && dist > 0.001) { _sep.addScaledVector(_d, 1 / (dist * dist)); nS++; }
+      }
+    }
+    if (!rtb) { neiSum += nA; neiCnt++; }
+    _acc.set(0, 0, 0);
+    let sepW = W.sep;
+    if (rtb && Math.hypot(this.pos.x - this.pad.x, this.pos.z - this.pad.z) < 15) sepW = 0.3;
+    if (nS) { _sep.setLength(MAXS).sub(this.vel); limit(_sep, MAXF); _acc.addScaledVector(_sep, sepW); }
+    if (nA) {
+      _ali.divideScalar(nA).setLength(MAXS).sub(this.vel); limit(_ali, MAXF); _acc.addScaledVector(_ali, W.ali);
+      _coh.divideScalar(nA).sub(this.pos);
+      if (_coh.lengthSq() > 0.0001) { _coh.setLength(MAXS).sub(this.vel); limit(_coh, MAXF); _acc.addScaledVector(_coh, W.coh); }
+    }
+    // goal seeking with arrival
+    const goal = rtb ? _g.set(this.pad.x, 22, this.pad.z) : this.goal;
+    _des.subVectors(goal, this.pos);
+    const gd = _des.length();
+    if (gd > 0.01) {
+      _des.setLength(MAXS * Math.min(1, gd / W.arrive)).sub(this.vel);
+      limit(_des, MAXF); _acc.addScaledVector(_des, W.goal);
+    }
+    // obstacle / geofence avoidance
+    for (const o of obstacles) {
+      const dx = this.pos.x - o.x, dz = this.pos.z - o.z;
+      const d = Math.hypot(dx, dz) || 0.01;
+      const m = o.r + 14;
+      if (d < m && this.pos.y < o.h + 10) {
+        const s = (m - d) / 14;
+        _acc.x += dx / d * s * MAXF * 2.5;
+        _acc.z += dz / d * s * MAXF * 2.5;
+        if (o.type === 'BLD' && d < o.r + 5) _acc.y += MAXF * 1.5 * s;
+        if (o.type === 'NFZ' && d < o.r + 8 && T - this.nfzT > 20) {
+          this.nfzT = T;
+          if (Math.random() < 0.5) log('warn', `GEOFENCE: ${this.id} deflected from ${o.name} · margin ${(d - o.r).toFixed(1)}m`);
+        }
+      }
+    }
+    // altitude & area bounds
+    if (this.pos.y < 14) _acc.y += (14 - this.pos.y) * 5;
+    if (this.pos.y > 100) _acc.y -= (this.pos.y - 100) * 5;
+    for (const ax of ['x', 'z']) {
+      const v = this.pos[ax];
+      if (Math.abs(v) > 200) _acc[ax] -= Math.sign(v) * (Math.abs(v) - 200) * 3;
+    }
+    limit(_acc, MAXF * 2.5);
+    this.lastAcc.copy(_acc);
+    this.vel.addScaledVector(_acc, dt);
+    const spd = this.vel.length();
+    const minS = rtb ? 0 : W.minS;
+    if (spd > MAXS) this.vel.multiplyScalar(MAXS / spd);
+    else if (spd < minS && spd > 0.001) this.vel.multiplyScalar(minS / spd);
+    this.pos.addScaledVector(this.vel, dt);
+
+    if (rtb && Math.hypot(this.pos.x - this.pad.x, this.pos.z - this.pad.z) < 2.5) {
+      this.setState('LANDING');
+      log('info', `${this.id} over PAD-${pad2(this.i + 1)} · initiating auto-land`);
+    }
+  }
+
+  orient(dt) {
+    const hs = Math.hypot(this.vel.x, this.vel.z);
+    if (hs > 0.5) this.yaw = lerpAngle(this.yaw, Math.atan2(this.vel.x, this.vel.z), Math.min(1, dt * 4));
+    const fx = Math.sin(this.yaw), fz = Math.cos(this.yaw);
+    const aF = this.lastAcc.x * fx + this.lastAcc.z * fz;
+    const aR = this.lastAcc.x * -fz + this.lastAcc.z * fx;
+    const flying = this.state === 'ACTIVE' || this.state === 'RTB';
+    const tp = flying ? clamp(hs / MAXS * 0.3 + aF * 0.004, -0.45, 0.45) : 0;
+    const tr = flying ? clamp(aR * 0.01, -0.5, 0.5) : 0;
+    this.pitch += (tp - this.pitch) * Math.min(1, dt * 5);
+    this.roll += (tr - this.roll) * Math.min(1, dt * 5);
+    this.group.position.copy(this.pos);
+    this.group.rotation.set(this.pitch, this.yaw, this.roll, 'YXZ');
+    this.strobeMat.color.setHex(((T * 1.3 + this.phase) % 1) < 0.08 ? 0xff2233 : 0x220305);
+  }
+
+  updateTrail() {
+    const a = this.trail.geometry.attributes.position;
+    const arr = a.array;
+    if (this.state === 'CHARGING' || this.state === 'IDLE') {
+      for (let k = 0; k < TL; k++) { arr[k * 3] = this.pos.x; arr[k * 3 + 1] = this.pos.y; arr[k * 3 + 2] = this.pos.z; }
+    } else {
+      arr.copyWithin(3, 0, (TL - 1) * 3);
+      arr[0] = this.pos.x; arr[1] = this.pos.y; arr[2] = this.pos.z;
+    }
+    a.needsUpdate = true;
+  }
+}
+const drones = Array.from({ length: N }, (_, i) => new Drone(i));
+
+// ================= MISSION LOGIC =================
+let waypoints = [], wpIdx = 0, routeMats = [];
+const orbitCenter = V3();
+const leader = V3(), leaderVel = V3(1, 0, 0);
+let sweepZ = 0, modeTimer = 0, auto = true, lastAssign = -99, lastActiveCount = -1, orbitFromClick = false;
+
+function outOfNfz(p) {
+  for (const o of obstacles) if (o.type === 'NFZ') {
+    const dx = p.x - o.x, dz = p.z - o.z, d = Math.hypot(dx, dz) || 1;
+    if (d < o.r + 18) { p.x = o.x + dx / d * (o.r + 18); p.z = o.z + dz / d * (o.r + 18); }
+  }
+  return p;
+}
+function genRoute() {
+  waypoints = [];
+  const n = 6, a0 = rand(0, Math.PI * 2);
+  for (let i = 0; i < n; i++) {
+    const a = a0 + i / n * Math.PI * 2 + rand(-0.3, 0.3), r = rand(70, 160);
+    waypoints.push(outOfNfz(V3(Math.cos(a) * r, rand(30, 52), Math.sin(a) * r)));
+  }
+  wpIdx = 0; rebuildRoute();
+}
+function rebuildRoute() {
+  routeGroup.clear(); routeMats = [];
+  const pts = waypoints.map(w => w.clone()); pts.push(waypoints[0].clone());
+  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineDashedMaterial({ color: 0xffcc33, dashSize: 3, gapSize: 3, transparent: true, opacity: 0.6 }));
+  line.computeLineDistances(); routeGroup.add(line);
+  const oct = new THREE.OctahedronGeometry(1.6);
+  const ringG = new THREE.RingGeometry(4, 4.5, 32).rotateX(-Math.PI / 2);
+  waypoints.forEach(w => {
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffcc33, transparent: true, opacity: 0.35 });
+    routeMats.push(mat);
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, w.y, 6), mat); beam.position.set(w.x, w.y / 2, w.z);
+    const top = new THREE.Mesh(oct, mat); top.position.copy(w);
+    const ring = new THREE.Mesh(ringG, mat); ring.position.set(w.x, 0.3, w.z);
+    routeGroup.add(beam, top, ring);
+  });
+}
+const randomBuildingPos = () => { const b = pick(buildings); return V3(b.x, 0, b.z); };
+
+const bannerEl = $('#banner');
+let bannerTimer = 0;
+function setMode(m, why) {
+  if (m !== mode) {
+    mode = m;
+    if (m === 'ORBIT' && !orbitFromClick) {
+      const b = pick(buildings); orbitCenter.set(b.x, 0, b.z);
+      why = why || `target ${b.name}`;
+    }
+    if (m === 'PATROL') genRoute();
+    lastAssign = -99;
+    log('sys', `MISSION: retasking swarm → ${m}${why ? ' · ' + why : ''}`);
+    $('#mode').textContent = m;
+    $('#bannerTxt').textContent = m;
+    bannerEl.classList.add('show'); bannerTimer = 2.5;
+  }
+  orbitFromClick = false;
+  modeTimer = 0;
+}
+
+function assignSlots(active) {
+  let arr = active.slice();
+  if (mode === 'SCAN') arr.sort((a, b) => a.pos.x - b.pos.x);
+  else if (mode === 'ORBIT') arr.sort((a, b) => Math.atan2(a.pos.z - orbitCenter.z, a.pos.x - orbitCenter.x) - Math.atan2(b.pos.z - orbitCenter.z, b.pos.x - orbitCenter.x));
+  else if (mode === 'FORMATION') arr.sort((a, b) => a.pos.distanceToSquared(leader) - b.pos.distanceToSquared(leader));
+  arr.forEach((d, k) => d.slot = k);
+  lastAssign = T; lastActiveCount = active.length;
+}
+
+function computeGoals(active, dt) {
+  const n = active.length || 1;
+  // formation leader path
+  const lx = 140 * Math.sin(T * 0.05), lz = 110 * Math.sin(T * 0.08);
+  leaderVel.set(lx - leader.x, 0, lz - leader.z); leader.set(lx, 72, lz);
+  if (leaderVel.lengthSq() < 1e-8) leaderVel.set(1, 0, 0);
+  leaderVel.normalize();
+  sweepZ = 150 * Math.sin(T * 0.12);
+  const cols = 8;
+  for (const d of active) {
+    const k = d.slot;
+    switch (mode) {
+      case 'PATROL': {
+        const w = waypoints[wpIdx];
+        d.goal.set(w.x + Math.sin(d.phase) * 12, w.y + Math.cos(d.phase * 2) * 6, w.z + Math.cos(d.phase) * 12);
+        break;
+      }
+      case 'ORBIT': {
+        const ring = k % 3, R = 36 + ring * 14, alt = 30 + ring * 12;
+        const a = T * (0.32 - ring * 0.07) * (ring === 1 ? -1 : 1) + (k / n) * Math.PI * 2;
+        d.goal.set(orbitCenter.x + Math.cos(a) * R, alt + Math.sin(T + k) * 2, orbitCenter.z + Math.sin(a) * R);
+        break;
+      }
+      case 'FORMATION': {
+        const col = k % cols, row = Math.floor(k / cols), c = col - (cols - 1) / 2;
+        const back = row * 7 + Math.abs(c) * 4;
+        // right vector = (-fz, 0, fx) with forward (fx, 0, fz)
+        d.goal.set(leader.x + -leaderVel.z * c * 8 - leaderVel.x * back,
+                   leader.y + row * 1.5,
+                   leader.z + leaderVel.x * c * 8 - leaderVel.z * back);
+        break;
+      }
+      case 'SCAN': {
+        d.goal.set(-165 + k * (330 / Math.max(1, n - 1)), 58 + (k % 2) * 9, sweepZ);
+        break;
+      }
+    }
+  }
+}
+
+// coverage grid
+const CG = 24, cov = new Float32Array(CG * CG).fill(-1e9);
+function markCoverage(active) {
+  for (const d of active) {
+    const cx = Math.floor((d.pos.x + 200) / 400 * CG), cz = Math.floor((d.pos.z + 200) / 400 * CG);
+    if (cx >= 0 && cx < CG && cz >= 0 && cz < CG) cov[cz * CG + cx] = T;
+  }
+}
+function coveragePct() { let c = 0; for (const v of cov) if (T - v < 90) c++; return c / cov.length * 100; }
+
+// focus
+let focus = drones[0], focusTimer = 0;
+function setFocus(d) { focus = d; focusTimer = 0; }
+
+// ================= LOG =================
+const logEl = $('#log');
+function log(lv, msg) {
+  const line = document.createElement('div');
+  line.className = 'ln ' + lv;
+  const ts = new Date().toISOString().slice(11, 23);
+  line.innerHTML = `<span class="ts">${ts}</span><span class="lv">${lv === 'cmd' ? '$' : lv.toUpperCase()}</span><span class="msg">${msg.replace(/(UAV-\d+)/g, '<b>$1</b>')}</span>`;
+  const cur = logEl.querySelector('.cursor-line');
+  logEl.insertBefore(line, cur);
+  while (logEl.children.length > 60) logEl.firstChild.remove();
+}
+{
+  const c = document.createElement('div'); c.className = 'ln cursor-line';
+  c.innerHTML = '<span class="ts prompt" id="prompt"></span><input id="cmd" autocomplete="off" spellcheck="false" placeholder="escribe help · p.ej. drones=40">';
+  logEl.appendChild(c);
+}
+new ResizeObserver(() => { logEl.scrollTop = logEl.scrollHeight; }).observe(logEl);
+setInterval(() => { logEl.scrollTop = logEl.scrollHeight; }, 200);
+
+let kf = 1200, epoch = 88410;
+const OBJ = ['vehicle', 'person', 'structure', 'thermal_anomaly', 'antenna', 'solar_array', 'road_crack', 'vessel'];
+function chatter() {
+  const act = drones.filter(d => d.state === 'ACTIVE'); if (!act.length) return;
+  const d = pick(act), d2 = pick(act), W = MODE_W[mode];
+  const gen = [
+    () => ['info', `${d.id} telemetry · alt ${d.pos.y.toFixed(1)}m · v ${d.vel.length().toFixed(1)}m/s · hdg ${hdgOf(d)}°`],
+    () => ['info', `MESH: route table updated · ${act.length} nodes · max ${1 + (Math.random() * 4 | 0)} hops`],
+    () => ['info', `SLAM: keyframe #${kf++} fused · loop-closure err ${(Math.random() * 4).toFixed(2)}cm`],
+    () => ['ok', `VISION: ${d.id} detected ${pick(OBJ)} · conf ${(0.8 + Math.random() * 0.19).toFixed(2)} · bbox tracked`],
+    () => ['info', `PLANNER: ${d.id} path replanned (RRT*) in ${(2 + Math.random() * 9).toFixed(1)}ms`],
+    () => ['info', `EKF2: ${d.id} GNSS/IMU residual ${(Math.random() * 0.3).toFixed(3)} · RTK FIX`],
+    () => ['info', `LINK: ${d.id} RSSI -${55 + (Math.random() * 25 | 0)}dBm · SNR ${18 + (Math.random() * 14 | 0)}dB`],
+    () => ['ok', `CONSENSUS: epoch ${epoch++} committed · quorum ${act.length}/${N}`],
+    () => ['info', `WIND: gust ${(3 + Math.random() * 7).toFixed(1)}m/s @ ${Math.random() * 360 | 0}° · compensating`],
+    () => ['info', `BOIDS: sep ${W.sep} · ali ${W.ali} · coh ${W.coh} · avg neighbors ${(neiSum / Math.max(1, neiCnt)).toFixed(1)}`],
+    () => ['info', `THERMAL: ${d.id} ESC temps ${Math.round(d.temp)}°C · nominal`],
+    () => ['info', `AR-OVERLAY: ${act.length} geo-anchors synced to ops tablets · drift ${(Math.random() * 3).toFixed(1)}cm`],
+    () => ['warn', `${d.id} packet loss ${(3 + Math.random() * 9).toFixed(1)}% · rerouting via ${d2.id}`],
+  ];
+  let g = pick(gen)();
+  if (g[0] === 'warn' && Math.random() < 0.6) g = gen[0]();
+  log(g[0], g[1]);
+}
+const boot = [
+  ['sys', `C2 kernel v4.2.1 booting · project ${PROJECT}`],
+  ['sys', `loading swarm manifest · ${N} airframes · quad-X config`],
+  ['ok', 'MAVLink bridge online · udp://0.0.0.0:14550'],
+  ['ok', `RTK-GNSS base locked · 23 sats · ${LAT0.toFixed(4)}, ${LON0.toFixed(4)}`],
+  ['ok', 'mesh network formed · AES-256-GCM session established'],
+  ['sys', 'flocking controller: reynolds/boids v3 · sep/ali/coh + goal + geofence'],
+  ['info', `geofence loaded · ${obstacles.filter(o => o.type === 'NFZ').length} NFZ · ${buildings.length} structures mapped`],
+  ['ok', 'launch sequence authorized · staggered takeoff'],
+];
+boot.forEach((b, i) => setTimeout(() => log(b[0], b[1]), 150 + i * 280));
+
+// ================= INPUT =================
+const raycaster = new THREE.Raycaster(), mouse = new THREE.Vector2();
+const groundPlane = new THREE.Plane(V3(0, 1, 0), 0);
+let downPos = null, lastInteraction = -99;
+function groundHit(e) {
+  mouse.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  raycaster.setFromCamera(mouse, camera);
+  const p = V3();
+  return raycaster.ray.intersectPlane(groundPlane, p) ? p : null;
+}
+renderer.domElement.addEventListener('pointermove', e => {
+  const p = groundHit(e);
+  if (p && Math.abs(p.x) < 260 && Math.abs(p.z) < 260) {
+    hoverRing.visible = true; hoverRing.position.set(p.x, 0.35, p.z);
+    $('#cursor').textContent = `CURSOR E${p.x >= 0 ? '+' : ''}${p.x.toFixed(0)} N${-p.z >= 0 ? '+' : ''}${(-p.z).toFixed(0)}`;
+  } else hoverRing.visible = false;
+});
+renderer.domElement.addEventListener('pointerdown', e => { downPos = [e.clientX, e.clientY]; lastInteraction = T; });
+renderer.domElement.addEventListener('pointerup', e => {
+  if (!downPos || Math.hypot(e.clientX - downPos[0], e.clientY - downPos[1]) > 5) return;
+  const p = groundHit(e); if (!p || Math.abs(p.x) > 200 || Math.abs(p.z) > 200) return;
+  outOfNfz(p);
+  ripple(p, 0xffcc33);
+  if (mode === 'PATROL') {
+    waypoints.splice(wpIdx, 0, V3(p.x, rand(32, 48), p.z));
+    if (waypoints.length > 8) waypoints.splice((wpIdx + 1) % waypoints.length, 1);
+    wpIdx = waypoints.findIndex(w => w.x === p.x && w.z === p.z);
+    rebuildRoute();
+    log('sys', `OPERATOR: priority waypoint WP-${wpIdx + 1} @ E${p.x.toFixed(0)} N${(-p.z).toFixed(0)} · swarm rerouting`);
+  } else {
+    orbitCenter.set(p.x, 0, p.z); orbitFromClick = true;
+    if (mode === 'ORBIT') { log('sys', `OPERATOR: orbit target moved → E${p.x.toFixed(0)} N${(-p.z).toFixed(0)}`); orbitFromClick = false; modeTimer = 0; }
+    else setMode('ORBIT', 'operator designated target');
+  }
+});
+let camMode = 'ORBIT';
+const lookTarget = V3();
+function setAuto(v) { auto = v; $('#auto').classList.toggle('off', !auto); log('sys', `AUTO-TASKING ${auto ? 'ENABLED' : 'DISABLED'}`); modeTimer = 0; }
+addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  const k = e.key.toLowerCase();
+  if (k === 'enter' || k === '/') { e.preventDefault(); cmdEl.focus(); }
+  else if (k >= '1' && k <= '4') { setMode(MODES[+k - 1], 'operator command'); }
+  else if (k === 'a') setAuto(!auto);
+  else if (k === 'h') document.body.classList.toggle('nohud');
+  else if (k === 'f') { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(); }
+  else if (k === 'c') {
+    camMode = camMode === 'ORBIT' ? 'FOLLOW' : 'ORBIT';
+    if (camMode === 'FOLLOW') { controls.enabled = false; lookTarget.copy(controls.target); }
+    else { controls.enabled = true; controls.target.copy(lookTarget); }
+    log('sys', `CAMERA: ${camMode === 'FOLLOW' ? 'chase cam locked on ' + focus.id : 'orbital overview'}`);
+  }
+});
+setTimeout(() => { $('#hint').style.opacity = 0.25; }, 15000);
+
+// ================= HUD: fleet matrix =================
+const fleetEl = $('#fleet');
+let cells = [];
+function buildFleet() {
+  fleetEl.innerHTML = '';
+  cells = drones.map(d => {
+    const c = document.createElement('div');
+    c.className = 'cell';
+    c.innerHTML = `<span>${d.id.slice(4)}</span><span class="bar"><i></i></span><span class="st"></span>`;
+    c.onclick = () => { setFocus(d); log('sys', `OPERATOR: focus → ${d.id}`); };
+    fleetEl.appendChild(c);
+    return { c, bar: c.querySelector('i'), st: c.querySelector('.st') };
+  });
+}
+buildFleet();
+
+// ================= TERMINAL COMMANDS =================
+const cmdEl = $('#cmd'), promptEl = $('#prompt'), hist = [];
+let histI = 0;
+const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const updatePrompt = () => { promptEl.textContent = `c2@${PROJECT.toLowerCase().replace(/\s+/g, '-')}:~$`; };
+updatePrompt();
+$('#term').addEventListener('click', () => cmdEl.focus());
+cmdEl.addEventListener('keydown', e => {
+  e.stopPropagation();
+  if (e.key === 'Enter') {
+    const v = cmdEl.value.trim(); cmdEl.value = '';
+    if (v) { hist.push(v); histI = hist.length; runCmd(v); }
+  } else if (e.key === 'ArrowUp') { if (histI > 0) cmdEl.value = hist[--histI]; e.preventDefault(); }
+  else if (e.key === 'ArrowDown') { histI = Math.min(hist.length, histI + 1); cmdEl.value = hist[histI] || ''; e.preventDefault(); }
+  else if (e.key === 'Escape') cmdEl.blur();
+});
+
+function updateUrl() {
+  try {
+    const u = new URL(location.href);
+    u.searchParams.set('drones', N);
+    u.searchParams.set('name', PROJECT);
+    if (QUALITY === 'low') u.searchParams.set('quality', 'low'); else u.searchParams.delete('quality');
+    history.replaceState(null, '', u);
+  } catch (e) { /* file:// puede bloquear replaceState */ }
+}
+
+function setDroneCount(n) {
+  n = clamp(Math.round(n), 1, 150);
+  const prev = N;
+  if (n === prev) { log('info', `FLEET: swarm already at ${n} airframes`); return; }
+  while (drones.length > n) drones.pop().dispose();
+  N = n;
+  buildPads(N);
+  drones.forEach(d => { d.pad = pads[d.i]; if (d.state === 'IDLE' || d.state === 'CHARGING') d.pos.copy(d.pad); });
+  for (let i = drones.length; i < n; i++) drones.push(new Drone(i, 0.3 + (i - prev) * 0.08));
+  if (!drones.includes(focus)) setFocus(drones[0]);
+  lastActiveCount = -1;
+  buildFleet();
+  updateUrl();
+  if (n < prev) log('warn', `FLEET: decommissioning ${prev - n} airframes · swarm size ${n}`);
+  else log('ok', `FLEET: commissioning ${n - prev} airframes · staggered takeoff · swarm size ${n}`);
+}
+
+function setQuality(q) {
+  QUALITY = q;
+  renderer.setPixelRatio(q === 'low' ? 1 : Math.min(devicePixelRatio, 2));
+  composer.setPixelRatio(renderer.getPixelRatio());
+  bloom.enabled = q !== 'low';
+  onResize(); updateUrl();
+  log('ok', `RENDER: quality ${q} · pixel ratio ${renderer.getPixelRatio()} · bloom ${bloom.enabled ? 'on' : 'off'}`);
+}
+
+function runCmd(raw) {
+  log('cmd', esc(raw));
+  const m = raw.match(/^\s*([a-zA-Z]+)\s*(?:[=\s]\s*(.+))?$/);
+  if (!m) { log('err', `parse error: ${esc(raw)} · type 'help'`); return; }
+  const cmd = m[1].toLowerCase(), argRaw = (m[2] || '').trim(), arg = argRaw.toLowerCase();
+  switch (cmd) {
+    case 'help':
+      [
+        'drones=N · tamaño del enjambre (1-150), p.ej. drones=40',
+        'mode=patrol|orbit|formation|scan · cambiar misión',
+        'quality=low|high · low = resolución 1x y sin bloom (más FPS)',
+        'name=TEXTO · nombre del proyecto',
+        'auto=on|off · rotación automática de modos',
+        'status · clear · help',
+        '[Enter] o [/] abre la terminal · [Esc] sale · [↑/↓] historial',
+      ].forEach(l => log('info', l));
+      break;
+    case 'drones': {
+      const n = parseInt(arg);
+      if (isNaN(n)) log('info', `FLEET: swarm size ${N} airframes · usage drones=N (1-150)`);
+      else setDroneCount(n);
+      break;
+    }
+    case 'mode': {
+      const md = arg.toUpperCase();
+      if (MODES.includes(md)) setMode(md, 'operator command');
+      else log('err', `unknown mode '${esc(argRaw)}' · options: ${MODES.join(', ').toLowerCase()}`);
+      break;
+    }
+    case 'quality':
+      if (arg === 'low' || arg === 'high') setQuality(arg);
+      else log('info', `RENDER: quality ${QUALITY} · usage quality=low|high`);
+      break;
+    case 'name':
+      if (!argRaw) { log('info', `project name: ${PROJECT}`); break; }
+      PROJECT = argRaw.toUpperCase().slice(0, 24);
+      $('#pname').textContent = PROJECT;
+      document.title = `${PROJECT} // SWARM C2`;
+      updatePrompt(); updateUrl();
+      log('ok', `project renamed → ${esc(PROJECT)}`);
+      break;
+    case 'auto':
+      if (arg === 'on' || arg === 'off') setAuto(arg === 'on');
+      else log('info', `auto-tasking ${auto ? 'on' : 'off'} · usage auto=on|off`);
+      break;
+    case 'status': {
+      const c = s => drones.filter(d => d.state === s).length;
+      log('info', `STATUS: ${N} airframes · ${c('ACTIVE')} active · ${c('RTB') + c('LANDING')} rtb · ${c('CHARGING')} charging · mode ${mode} · quality ${QUALITY} · ${$('#fps').textContent}`);
+      break;
+    }
+    case 'clear':
+      [...logEl.querySelectorAll('.ln:not(.cursor-line)')].forEach(n => n.remove());
+      break;
+    default:
+      log('err', `${esc(cmd)}: command not found · type 'help'`);
+  }
+}
+
+// ================= CANVASES =================
+function fitCanvas(c) {
+  const r = c.getBoundingClientRect(), dpr = Math.min(devicePixelRatio, 2);
+  c.width = Math.max(1, r.width * dpr | 0); c.height = Math.max(1, r.height * dpr | 0);
+  const ctx = c.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { c, ctx, w: r.width, h: r.height };
+}
+let mapC, horC, chartC;
+function fitAll() { mapC = fitCanvas($('#map')); horC = fitCanvas($('#horizon')); chartC = fitCanvas($('#chart')); }
+
+function drawMap() {
+  const { ctx, w, h } = mapC; if (w < 2) return;
+  const S = w / 400, X = x => (x + 200) * S, Y = z => (z + 200) * S;
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = 'rgba(2,10,16,.6)'; ctx.fillRect(0, 0, w, h);
+  // grid
+  ctx.strokeStyle = 'rgba(63,240,255,.08)'; ctx.lineWidth = 1; ctx.beginPath();
+  for (let g = -200; g <= 200; g += 50) { ctx.moveTo(X(g), 0); ctx.lineTo(X(g), h); ctx.moveTo(0, Y(g)); ctx.lineTo(w, Y(g)); }
+  ctx.stroke();
+  // coverage
+  const cw = w / CG;
+  for (let i = 0; i < cov.length; i++) {
+    const age = T - cov[i]; if (age > 90) continue;
+    ctx.fillStyle = `rgba(77,255,154,${0.16 * (1 - age / 90)})`;
+    ctx.fillRect((i % CG) * cw, Math.floor(i / CG) * cw, cw - 0.5, cw - 0.5);
+  }
+  // obstacles
+  for (const o of obstacles) {
+    if (o.type === 'BLD') {
+      ctx.fillStyle = 'rgba(43,212,255,.14)'; ctx.strokeStyle = 'rgba(43,212,255,.6)';
+      ctx.fillRect(X(o.x - o.w / 2), Y(o.z - o.d / 2), o.w * S, o.d * S);
+      ctx.strokeRect(X(o.x - o.w / 2), Y(o.z - o.d / 2), o.w * S, o.d * S);
+    } else {
+      ctx.fillStyle = 'rgba(255,77,94,.1)'; ctx.strokeStyle = 'rgba(255,77,94,.8)';
+      ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.arc(X(o.x), Y(o.z), o.r * S, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = '#ff4d5e'; ctx.font = '9px monospace'; ctx.fillText(o.name, X(o.x) - 14, Y(o.z) + 3);
+    }
+  }
+  // base
+  ctx.strokeStyle = 'rgba(77,255,154,.9)'; ctx.beginPath(); ctx.arc(X(0), Y(0), BASE_R * S, 0, Math.PI * 2); ctx.stroke();
+  // radar sweep
+  const sa = T * 1.1;
+  for (let i = 0; i < 24; i++) {
+    const a = sa - i * 0.025;
+    ctx.strokeStyle = `rgba(63,240,255,${0.3 * (1 - i / 24)})`;
+    ctx.beginPath(); ctx.moveTo(X(0), Y(0)); ctx.lineTo(X(0) + Math.cos(a) * w, Y(0) + Math.sin(a) * w); ctx.stroke();
+  }
+  // mode overlays
+  if (mode === 'PATROL') {
+    ctx.strokeStyle = 'rgba(255,204,51,.7)'; ctx.setLineDash([4, 4]); ctx.beginPath();
+    waypoints.forEach((p, i) => i ? ctx.lineTo(X(p.x), Y(p.z)) : ctx.moveTo(X(p.x), Y(p.z)));
+    ctx.closePath(); ctx.stroke(); ctx.setLineDash([]);
+    waypoints.forEach((p, i) => {
+      ctx.fillStyle = i === wpIdx ? '#ffcc33' : 'rgba(255,204,51,.35)';
+      ctx.beginPath(); ctx.arc(X(p.x), Y(p.z), i === wpIdx ? 4 : 3, 0, Math.PI * 2); ctx.fill();
+      ctx.font = '9px monospace'; ctx.fillText('WP' + (i + 1), X(p.x) + 5, Y(p.z) - 4);
+    });
+  } else if (mode === 'ORBIT') {
+    ctx.strokeStyle = 'rgba(255,159,51,.8)';
+    for (const R of [36, 50, 64]) { ctx.beginPath(); ctx.arc(X(orbitCenter.x), Y(orbitCenter.z), R * S, 0, Math.PI * 2); ctx.stroke(); }
+  } else if (mode === 'SCAN') {
+    ctx.strokeStyle = 'rgba(77,255,154,.9)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(X(-170), Y(sweepZ)); ctx.lineTo(X(170), Y(sweepZ)); ctx.stroke(); ctx.lineWidth = 1;
+  } else if (mode === 'FORMATION') {
+    ctx.fillStyle = '#b58cff'; ctx.beginPath(); ctx.arc(X(leader.x), Y(leader.z), 4, 0, Math.PI * 2); ctx.fill();
+  }
+  // drones
+  for (const d of drones) {
+    ctx.fillStyle = '#' + STATE_COLOR[d.state].toString(16).padStart(6, '0');
+    ctx.fillRect(X(d.pos.x) - 1.5, Y(d.pos.z) - 1.5, 3, 3);
+  }
+  ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.arc(X(focus.pos.x), Y(focus.pos.z), 6 + Math.sin(T * 6) * 1.5, 0, Math.PI * 2); ctx.stroke();
+  // camera
+  ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.beginPath(); ctx.arc(X(clamp(camera.position.x, -200, 200)), Y(clamp(camera.position.z, -200, 200)), 2.5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(63,240,255,.8)'; ctx.font = '9px monospace';
+  ctx.fillText('N', w / 2 - 3, 10);
+}
+
+function drawHorizon() {
+  const { ctx, w, h } = horC; if (w < 2) return;
+  const d = focus, cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2 - 3, k = R * 1.6;
+  ctx.clearRect(0, 0, w, h);
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
+  ctx.translate(cx, cy); ctx.rotate(-d.roll);
+  const hy = -d.pitch * k;
+  ctx.fillStyle = '#0b3a52'; ctx.fillRect(-2 * R, -3 * R, 4 * R, 3 * R + hy);
+  ctx.fillStyle = '#3a2512'; ctx.fillRect(-2 * R, hy, 4 * R, 3 * R);
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(-2 * R, hy); ctx.lineTo(2 * R, hy); ctx.stroke();
+  ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.font = '8px monospace';
+  for (const p of [-20, -10, 10, 20]) {
+    const y = hy - p * Math.PI / 180 * k, lw = Math.abs(p) === 10 ? 14 : 22;
+    ctx.beginPath(); ctx.moveTo(-lw, y); ctx.lineTo(lw, y); ctx.stroke(); ctx.fillText(p, lw + 3, y + 3);
+  }
+  ctx.restore();
+  ctx.strokeStyle = '#3ff0ff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = '#ffcc33'; ctx.lineWidth = 2.5; ctx.beginPath();
+  ctx.moveTo(cx - 26, cy); ctx.lineTo(cx - 9, cy); ctx.lineTo(cx - 4, cy + 5); ctx.moveTo(cx + 26, cy); ctx.lineTo(cx + 9, cy); ctx.lineTo(cx + 4, cy + 5); ctx.stroke();
+  ctx.fillStyle = '#ffcc33'; ctx.fillRect(cx - 1.5, cy - 1.5, 3, 3);
+  ctx.fillStyle = '#fff'; ctx.font = '10px monospace'; ctx.textAlign = 'center';
+  ctx.fillText(String(hdgOf(d)).padStart(3, '0') + '°', cx, 14); ctx.textAlign = 'left';
+}
+
+const CH = 140, series = { thr: [], alt: [], lat: [] };
+function pushChart(active) {
+  const thr = 40 + active.length * 1.4 + Math.sin(T * 0.8) * 8 + rand(-5, 5);
+  const alt = active.length ? active.reduce((s, d) => s + d.pos.y, 0) / active.length : 0;
+  const lat = 18 + Math.sin(T * 0.3) * 4 + rand(0, 6) + (Math.random() < 0.04 ? rand(15, 35) : 0);
+  for (const [k, v] of [['thr', thr], ['alt', alt], ['lat', lat]]) { series[k].push(v); if (series[k].length > CH) series[k].shift(); }
+}
+function drawChart() {
+  const { ctx, w, h } = chartC; if (w < 2) return;
+  ctx.clearRect(0, 0, w, h);
+  ctx.strokeStyle = 'rgba(63,240,255,.08)'; ctx.beginPath();
+  for (let i = 1; i < 4; i++) { ctx.moveTo(0, h * i / 4); ctx.lineTo(w, h * i / 4); }
+  for (let i = 1; i < 6; i++) { ctx.moveTo(w * i / 6, 0); ctx.lineTo(w * i / 6, h); }
+  ctx.stroke();
+  const def = [['thr', '#3ff0ff', 0, 160, 'Mbps'], ['alt', '#4dff9a', 0, 90, 'm'], ['lat', '#ffcc33', 0, 70, 'ms']];
+  ctx.font = '10px monospace';
+  def.forEach(([k, col, mn, mx, u], j) => {
+    const s = series[k]; if (s.length < 2) return;
+    ctx.strokeStyle = col; ctx.lineWidth = 1.3; ctx.beginPath();
+    const off = CH - s.length;
+    s.forEach((v, i) => { const x = (off + i) / (CH - 1) * w, y = h - 4 - (clamp(v, mn, mx) - mn) / (mx - mn) * (h - 18); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+    ctx.stroke();
+    ctx.fillStyle = col; ctx.fillText(`${s[s.length - 1].toFixed(1)}${u}`, 4 + j * 82, 10);
+  });
+}
+
+// ================= HUD TEXT =================
+const t0 = Date.now();
+let frames = 0, fpsT = performance.now();
+function updateHud(active) {
+  const now = new Date();
+  $('#clock').textContent = now.toISOString().slice(11, 19);
+  const el = Math.floor((Date.now() - t0) / 1000);
+  $('#tplus').textContent = `${pad2(Math.floor(el / 3600))}:${pad2(Math.floor(el / 60) % 60)}:${pad2(el % 60)}`;
+  const cnt = s => drones.filter(d => d.state === s).length;
+  $('#sAct').textContent = active.length;
+  $('#sRtb').textContent = cnt('RTB') + cnt('LANDING');
+  $('#sChg').textContent = cnt('CHARGING') + cnt('IDLE') + cnt('LAUNCH');
+  $('#sBat').innerHTML = (drones.reduce((s, d) => s + d.battery, 0) / N).toFixed(0) + '<small>%</small>';
+  $('#sLink').innerHTML = (drones.reduce((s, d) => s + d.link, 0) / N).toFixed(1) + '<small>%</small>';
+  $('#sCov').innerHTML = coveragePct().toFixed(1) + '<small>%</small>';
+  $('#nodes').textContent = `${N} NODES`;
+  drones.forEach((d, i) => {
+    const c = cells[i];
+    c.c.className = 'cell ' + d.state + (d.battery < 20 ? ' low' : '') + (d === focus ? ' focus' : '');
+    c.bar.style.width = d.battery.toFixed(0) + '%';
+    c.st.textContent = STATE_SHORT[d.state];
+  });
+  const d = focus, lat = LAT0 - d.pos.z / 111320, lon = LON0 + d.pos.x / (111320 * Math.cos(LAT0 * Math.PI / 180));
+  $('#fid').textContent = d.id;
+  $('#fpvId').textContent = `${d.id} · CAM0`;
+  const rows = [
+    ['STATE', d.state], ['ALT', d.pos.y.toFixed(1) + ' m'], ['SPD', d.vel.length().toFixed(1) + ' m/s'],
+    ['HDG', hdgOf(d) + '°'], ['BAT', d.battery.toFixed(1) + ' %'], ['LINK', d.link.toFixed(1) + ' %'],
+    ['RPM', Math.round(4200 + d.vel.length() * 180 + Math.sin(T * 9) * 60)], ['ESC', d.temp.toFixed(1) + ' °C'],
+    ['LAT', lat.toFixed(5)], ['LON', lon.toFixed(5)],
+  ];
+  $('#fvals').innerHTML = rows.map(([k, v]) => `<span class="k">${k}</span><span class="v">${v}</span>`).join('');
+  $('#fpvL').textContent = `ALT ${d.pos.y.toFixed(0)}m  SPD ${d.vel.length().toFixed(1)}`;
+  $('#fpvR').textContent = `${lat.toFixed(4)} ${lon.toFixed(4)}`;
+  $('#mapInfo').textContent = `COV ${coveragePct().toFixed(0)}% · R 400m`;
+}
+
+// ================= CAMERA / FPV =================
+const tagEl = $('#tag3d'), _p = V3();
+function updateCamera(dt) {
+  if (camMode === 'FOLLOW') {
+    const d = focus, fx = Math.sin(d.yaw), fz = Math.cos(d.yaw);
+    _p.set(d.pos.x - fx * 24, d.pos.y + 9, d.pos.z - fz * 24);
+    camera.position.lerp(_p, 1 - Math.exp(-dt * 2));
+    lookTarget.lerp(d.pos, 1 - Math.exp(-dt * 5));
+    camera.lookAt(lookTarget);
+  } else {
+    // drift orbit target toward swarm centroid when idle
+    if (T - lastInteraction > 8) {
+      const act = drones.filter(d => d.state === 'ACTIVE');
+      if (act.length) {
+        _p.set(0, 0, 0); act.forEach(d => _p.add(d.pos)); _p.divideScalar(act.length);
+        _p.multiplyScalar(0.5); _p.y = 25;
+        controls.target.lerp(_p, 1 - Math.exp(-dt * 0.3));
+      }
+    }
+    controls.update();
+  }
+}
+function renderFPV() {
+  if (document.body.classList.contains('nohud')) return;
+  const r = $('#fpv').getBoundingClientRect(); if (r.width < 4 || r.height < 4) return;
+  const d = focus, fx = Math.sin(d.yaw), fz = Math.cos(d.yaw);
+  fpvCam.position.set(d.pos.x + fx * 3, d.pos.y - 0.8, d.pos.z + fz * 3);
+  fpvCam.rotation.set(-0.42 - d.pitch * 0.5, d.yaw + Math.PI, -d.roll * 0.6, 'YXZ');
+  fpvCam.aspect = r.width / r.height; fpvCam.updateProjectionMatrix();
+  const hide = [d.group, focusRing, focusCone, footRing];
+  hide.forEach(o => o.visible = false);
+  const y = innerHeight - r.bottom;
+  renderer.setScissorTest(true);
+  renderer.setViewport(r.left, y, r.width, r.height);
+  renderer.setScissor(r.left, y, r.width, r.height);
+  renderer.render(scene, fpvCam);
+  renderer.setScissorTest(false);
+  renderer.setViewport(0, 0, innerWidth, innerHeight);
+  hide.forEach(o => o.visible = true);
+}
+
+// ================= MAIN LOOP =================
+const clock = new THREE.Clock();
+let hudT = 0, chartT = 0, chatT = 1.5;
+genRoute();
+$('#mode').textContent = mode;
+
+function frame() {
+  requestAnimationFrame(frame);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  T += dt;
+
+  // --- simulation ---
+  modeTimer += dt;
+  if (auto && modeTimer > 50 && T - lastInteraction > 20) setMode(MODES[(MODES.indexOf(mode) + 1) % MODES.length], 'auto-tasking');
+  const flying = [], active = [];
+  for (const d of drones) {
+    if (d.state === 'ACTIVE') { active.push(d); flying.push(d); }
+    else if (d.state === 'RTB') flying.push(d);
+  }
+  if (T - lastAssign > 2 || active.length !== lastActiveCount) assignSlots(active);
+  computeGoals(active, dt);
+  neiSum = 0; neiCnt = 0;
+  for (const d of drones) d.update(dt, flying);
+
+  if (mode === 'PATROL' && active.length) {
+    _p.set(0, 0, 0); active.forEach(d => _p.add(d.pos)); _p.divideScalar(active.length);
+    if (_p.distanceTo(waypoints[wpIdx]) < 30) {
+      log('ok', `NAV: WP-${wpIdx + 1} reached · ${active.length} units in formation`);
+      ripple(waypoints[wpIdx], 0xffcc33);
+      wpIdx++;
+      if (wpIdx >= waypoints.length) {
+        genRoute();
+        log('info', `PLANNER: new patrol route generated · ${waypoints.length} WPs · ${(waypoints.reduce((s, w, i) => s + w.distanceTo(waypoints[(i + 1) % waypoints.length]), 0) / 1000).toFixed(2)} km`);
+      }
+    }
+  }
+  markCoverage(active);
+
+  focusTimer += dt;
+  if (focusTimer > 10) {
+    const cand = active.length ? active : drones;
+    setFocus(pick(cand));
+  }
+  chatT -= dt;
+  if (chatT <= 0) { chatter(); chatT = rand(0.35, 1.3); }
+
+  // --- visuals ---
+  routeGroup.visible = mode === 'PATROL';
+  routeMats.forEach((m, i) => { m.opacity = i === wpIdx ? 0.6 + Math.sin(T * 6) * 0.3 : 0.25; });
+  orbitMarker.visible = mode === 'ORBIT';
+  orbitMarker.position.set(orbitCenter.x, 0.3, orbitCenter.z);
+  orbitMarker.rotation.y = T * 0.6;
+  leaderMarker.visible = mode === 'FORMATION';
+  leaderMarker.position.copy(leader); leaderMarker.rotation.y = T * 2;
+  scanBand.visible = scanWall.visible = mode === 'SCAN';
+  scanBand.position.z = sweepZ;
+  scanWall.position.set(0, 35, sweepZ);
+  beacons.forEach(b => b.material.opacity = Math.sin(T * 3 + b.userData.ph) > 0.6 ? 1 : 0.15);
+  for (let i = ripples.length - 1; i >= 0; i--) {
+    const r = ripples[i]; r.t += dt;
+    r.m.scale.setScalar(1 + r.t * 25); r.m.material.opacity = Math.max(0, 1 - r.t / 1.4);
+    if (r.t > 1.4) { scene.remove(r.m); r.m.geometry.dispose(); r.m.material.dispose(); ripples.splice(i, 1); }
+  }
+  hoverRing.rotation.y += dt;
+  // focus visuals
+  const f = focus;
+  focusRing.position.copy(f.pos);
+  focusRing.quaternion.copy(camera.quaternion);
+  focusRing.rotateZ(T * 1.5);
+  focusRing.scale.setScalar(1 + Math.sin(T * 5) * 0.08);
+  const gy = hgt(f.pos.x, f.pos.z), ch = Math.max(0.1, f.pos.y - gy), cr = ch * 0.35;
+  focusCone.position.copy(f.pos); focusCone.scale.set(cr, ch, cr);
+  footRing.position.set(f.pos.x, gy + 0.25, f.pos.z); footRing.scale.setScalar(cr);
+  if (bannerTimer > 0) { bannerTimer -= dt; if (bannerTimer <= 0) bannerEl.classList.remove('show'); }
+
+  updateCamera(dt);
+
+  // floating tag
+  _p.copy(f.pos).project(camera);
+  if (_p.z < 1 && Math.abs(_p.x) < 1 && Math.abs(_p.y) < 1) {
+    tagEl.style.display = 'block';
+    tagEl.style.left = ((_p.x + 1) / 2 * innerWidth + 20) + 'px';
+    tagEl.style.top = ((1 - _p.y) / 2 * innerHeight - 30) + 'px';
+    tagEl.textContent = `${f.id} ▸ ${f.state}\nALT ${f.pos.y.toFixed(1)}m  SPD ${f.vel.length().toFixed(1)}m/s\nBAT ${f.battery.toFixed(0)}%  LNK ${f.link.toFixed(0)}%`;
+  } else tagEl.style.display = 'none';
+
+  composer.render();
+  renderFPV();
+  drawHorizon();
+  drawMap();
+
+  hudT += dt; chartT += dt;
+  if (chartT > 0.25) { chartT = 0; pushChart(active); drawChart(); }
+  if (hudT > 0.25) { hudT = 0; updateHud(active); }
+  frames++;
+  const nowMs = performance.now();
+  if (nowMs - fpsT > 1000) { $('#fps').textContent = `${Math.round(frames * 1000 / (nowMs - fpsT))} FPS`; frames = 0; fpsT = nowMs; }
+}
+
+function onResize() {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  composer.setSize(innerWidth, innerHeight);
+  bloom.setSize(innerWidth, innerHeight);
+  fitAll();
+}
+addEventListener('resize', onResize);
+fitAll();
+frame();
+</script>
+</body>
+</html>
