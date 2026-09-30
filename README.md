@@ -109,6 +109,7 @@ index.html?name=SKYNET&drones=40&quality=low&lat=40.4168&lon=-3.7038
 | `drones` | `60` | Número de drones (1–150) |
 | `quality` | `high` | `low` para equipos modestos |
 | `lat`, `lon` | Valencia (39.4699, -0.3763) | Origen de las coordenadas GPS que se muestran |
+| `embed` | — | `1` desactiva el zoom con rueda (para incrustarlo en un `<iframe>` sin bloquear el scroll de la página) |
 
 ---
 

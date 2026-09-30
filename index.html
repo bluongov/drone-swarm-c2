@@ -252,6 +252,8 @@ controls.maxPolarAngle = Math.PI * 0.47;
 controls.minDistance = 30;
 controls.maxDistance = 480;
 controls.target.set(0, 25, 0);
+// embed=1: sin zoom con rueda para que la página contenedora pueda hacer scroll sobre el iframe
+if (params.get('embed') === '1') controls.enableZoom = false;
 
 const fpvCam = new THREE.PerspectiveCamera(70, 1.6, 0.3, 900);
 
