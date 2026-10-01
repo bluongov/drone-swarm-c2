@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>SWARM C2 // Mission Control</title>
 <style>
 :root{
@@ -17,7 +17,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:#02070c;color:var(--
   background:repeating-linear-gradient(0deg,rgba(0,0,0,.13) 0 1px,transparent 1px 3px),
              radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,.65))}
 #hud{position:fixed;inset:0;z-index:2;pointer-events:none;display:grid;
-  grid-template-columns:300px 1fr 300px;grid-template-rows:46px 1fr 175px;gap:10px;padding:10px}
+  grid-template-columns:clamp(230px,20vw,300px) minmax(0,1fr) clamp(230px,20vw,300px);
+  grid-template-rows:46px minmax(0,1fr) 175px;
+  grid-template-areas:"top top top" "left center right" "term term charts";gap:10px;
+  padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left))}
 .panel{background:var(--bg);border:1px solid var(--line);backdrop-filter:blur(4px);
   position:relative;padding:9px 10px;pointer-events:auto;overflow:hidden}
 .panel::before,.panel::after{content:'';position:absolute;width:10px;height:10px;border:2px solid var(--c)}
@@ -29,7 +32,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#02070c;color:var(--
 .title span:first-child::before{content:'▮ ';color:var(--g)}
 .dim{color:var(--c2)}
 
-#top{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;padding:0 16px}
+#top{grid-area:top;display:flex;align-items:center;justify-content:space-between;padding:0 16px;gap:10px}
 .brand{font-size:14px;letter-spacing:.14em;white-space:nowrap}
 .brand b{color:#fff}
 .logo{color:var(--g);margin-right:6px;display:inline-block;animation:spin 6s linear infinite}
@@ -44,9 +47,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:#02070c;color:var(--
   box-shadow:0 0 8px var(--r);animation:blink 1s steps(2) infinite}
 
 .col{display:flex;flex-direction:column;gap:10px;min-height:0}
-#left{grid-column:1;grid-row:2}
-#right{grid-column:3;grid-row:2}
-#center{grid-column:2;grid-row:2;position:relative}
+#left{grid-area:left}
+#right{grid-area:right}
+#center{grid-area:center;position:relative;min-height:0}
 .grow{flex:1;min-height:0;display:flex;flex-direction:column}
 
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
@@ -84,7 +87,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#02070c;color:var(--
 #fvals{flex:1;display:grid;grid-template-columns:auto 1fr;gap:1px 8px;font-size:11px;align-content:start}
 #fvals .k{color:var(--c2)} #fvals .v{color:#fff;text-align:right}
 
-#term{grid-column:1/3;grid-row:3;display:flex;flex-direction:column}
+#term{grid-area:term;display:flex;flex-direction:column}
 #log{flex:1;overflow:hidden;font-size:11px;line-height:1.45}
 .ln{white-space:nowrap;animation:fade .35s ease-out}
 .ts{color:#2a6f7c;margin-right:10px}
@@ -101,7 +104,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#02070c;color:var(--
 .ln.cmd .lv{color:#fff} .ln.cmd .msg{color:#fff}
 #term{cursor:text}
 
-#charts{grid-column:3;grid-row:3;display:flex;flex-direction:column}
+#charts{grid-area:charts;display:flex;flex-direction:column}
 #chart{flex:1;width:100%;min-height:0;display:block}
 .legend i{font-style:normal;margin-left:8px}
 
@@ -115,6 +118,83 @@ html,body{width:100%;height:100%;overflow:hidden;background:#02070c;color:var(--
 #tag3d{position:fixed;z-index:2;pointer-events:none;font-size:10px;color:#fff;padding:3px 7px;
   border-left:2px solid var(--c);background:rgba(4,14,22,.8);white-space:pre;line-height:1.35}
 body.nohud #hud, body.nohud #tag3d{display:none}
+
+/* ---------- controles en pantalla (táctil / móvil) ---------- */
+#ctrl{position:absolute;left:50%;bottom:4px;transform:translateX(-50%);display:none;gap:5px;align-items:stretch;white-space:nowrap}
+#ctrl button{pointer-events:auto;font:inherit;font-size:10px;letter-spacing:.12em;color:var(--c);background:var(--bg);
+  border:1px solid var(--line);padding:0 9px;min-height:34px;cursor:pointer;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
+#ctrl button.on{color:#02070c;background:var(--c);border-color:var(--c)}
+#ctrl .sep{width:1px;background:var(--line);margin:4px 2px}
+body.min #hud > :not(#top):not(#center), body.min .col > *{display:none}
+
+/* ---------- responsive ---------- */
+@media (max-width:1200px){ .brand .dim{display:none} }
+@media (pointer:coarse){ #ctrl{display:flex} #hint{display:none} #cmd{font-size:16px} }
+
+/* Pantallas horizontales bajas (portátiles 768p, iframe embebido): paneles más compactos */
+@media (orientation:landscape) and (max-height:860px) and (min-height:501px){
+  #hud{grid-template-rows:46px minmax(0,1fr) 140px;gap:8px}
+  #map{width:min(100%,24vh)}
+  #fpv{height:clamp(70px,12vh,150px)}
+  #horizon{width:88px;height:88px}
+  #fvals{font-size:10px}
+  .stat .v{font-size:16px}
+}
+
+/* Monitor vertical / tablet en vertical: escena arriba a todo el ancho, paneles en banda inferior */
+@media (orientation:portrait) and (min-width:700px){
+  #hud{grid-template-columns:repeat(3,minmax(0,1fr));
+    grid-template-rows:46px minmax(0,1fr) auto auto clamp(120px,11vh,190px);
+    grid-template-areas:"top top top" "center center center" "stats map fpv" "fleet map focus" "term term charts"}
+  .col{display:contents}
+  #pStats{grid-area:stats} #pFleet{grid-area:fleet} #pMap{grid-area:map;display:flex;flex-direction:column} #fpvp{grid-area:fpv} #pFocus{grid-area:focus}
+  #map{margin:auto}
+  #fleet{max-height:clamp(110px,17vh,360px)}
+  #map{width:min(100%,30vh)}
+  #fpv{height:clamp(80px,8vh,170px)}
+}
+@media (orientation:portrait) and (min-width:700px) and (max-width:1000px){
+  #fleet{grid-template-columns:repeat(2,minmax(0,1fr))}
+  #horizon{width:96px;height:96px}
+  #fvals{font-size:10px}
+}
+
+/* Móvil (vertical u horizontal): HUD compacto */
+@media (max-width:699px), (max-height:500px) and (orientation:landscape){
+  #hud{gap:6px}
+  .col{display:contents}
+  #pFleet,#fpvp,#pFocus,#charts{display:none}
+  #top{padding:6px 10px;flex-wrap:wrap;gap:2px 10px}
+  .brand{font-size:11px;letter-spacing:.1em}
+  .mode{font-size:10px} .mode b{font-size:12px;margin:0 6px}
+  .right span:not(.live){display:none}
+  #pMap{padding:5px} #pMap .title{font-size:8px;margin-bottom:3px} #pMap .title span:last-child{display:none}
+  #map{width:100%}
+  #ctrl{display:flex} #hint{display:none}
+  #banner .a{font-size:9px;letter-spacing:.3em} #banner .b{font-size:20px;letter-spacing:.25em}
+  #tag3d{font-size:9px}
+  #cmd{font-size:16px}
+}
+/* Móvil vertical */
+@media (max-width:699px){
+  #hud{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto;
+    grid-template-areas:"top" "stats" "center" "term"}
+  #pStats{grid-area:stats;padding:6px} #pStats .title{display:none}
+  .stats{grid-template-columns:repeat(6,minmax(0,1fr));gap:4px}
+  .stat{padding:3px 4px;min-width:0} .stat .l{font-size:7px;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:clip}
+  .stat .v{font-size:13px;white-space:nowrap} .stat .v small{font-size:8px}
+  #pMap{grid-area:center;justify-self:end;align-self:start;width:min(38vw,170px);z-index:1}
+  #term{height:98px;padding:6px 8px} #term .title{display:none}
+  #log{font-size:9.5px} .ln:not(.cursor-line) .ts{display:none} .lv{width:4ch;margin-right:5px}
+  #ctrl{bottom:6px} #ctrl button{padding:0 7px}
+}
+/* Móvil horizontal */
+@media (max-height:500px) and (orientation:landscape){
+  #hud{grid-template-columns:minmax(0,1fr) clamp(140px,24vw,210px);grid-template-rows:auto minmax(0,1fr);
+    grid-template-areas:"top top" "center map"}
+  #pStats,#term{display:none}
+  #pMap{grid-area:map;align-self:start}
+}
 
 @keyframes blink{50%{opacity:0}}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -139,7 +219,7 @@ body.nohud #hud, body.nohud #tag3d{display:none}
   </header>
 
   <aside class="col" id="left">
-    <section class="panel">
+    <section class="panel" id="pStats">
       <div class="title"><span>SWARM STATUS</span><span id="nodes"></span></div>
       <div class="stats">
         <div class="stat"><div class="l">ACTIVE</div><div class="v" id="sAct">0</div></div>
@@ -150,7 +230,7 @@ body.nohud #hud, body.nohud #tag3d{display:none}
         <div class="stat"><div class="l">COVERAGE</div><div class="v" id="sCov">0<small>%</small></div></div>
       </div>
     </section>
-    <section class="panel grow">
+    <section class="panel grow" id="pFleet">
       <div class="title"><span>FLEET MATRIX</span><span>BAT · STATE</span></div>
       <div id="fleet"></div>
     </section>
@@ -159,10 +239,11 @@ body.nohud #hud, body.nohud #tag3d{display:none}
   <div id="center">
     <div id="banner"><div class="a">▲ RETASKING SWARM ▲</div><div class="b" id="bannerTxt">PATROL</div></div>
     <div id="hint">[ENTER] terminal · [CLICK] waypoint/objetivo · [1-4] modo · [C] cámara · [A] auto · [H] HUD · [F] pantalla completa · <span id="cursor">—</span></div>
+    <div id="ctrl"><button data-mode="PATROL">PATROL</button><button data-mode="ORBIT">ORBIT</button><button data-mode="FORMATION">FORM</button><button data-mode="SCAN">SCAN</button><span class="sep"></span><button id="bCam">CAM</button><button id="bHud">HUD</button></div>
   </div>
 
   <aside class="col" id="right">
-    <section class="panel">
+    <section class="panel" id="pMap">
       <div class="title"><span>TACTICAL MAP</span><span id="mapInfo">R 400m</span></div>
       <canvas id="map"></canvas>
     </section>
@@ -170,7 +251,7 @@ body.nohud #hud, body.nohud #tag3d{display:none}
       <div class="title"><span>FPV FEED</span><span id="fpvId">—</span></div>
       <div id="fpv"><div class="xh"></div><div class="rec"><i>●</i> REC · EO/IR</div><div class="fi"><span id="fpvL"></span><span id="fpvR"></span></div></div>
     </section>
-    <section class="panel grow">
+    <section class="panel grow" id="pFocus">
       <div class="title"><span>FOCUS UNIT</span><span id="fid">—</span></div>
       <div class="focus"><canvas id="horizon"></canvas><div id="fvals"></div></div>
     </section>
@@ -205,8 +286,10 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 // ================= CONFIG =================
 const params = new URLSearchParams(location.search);
 let PROJECT = (params.get('name') || 'HALCYON').toUpperCase().slice(0, 24);
-let N = Math.min(150, Math.max(1, parseInt(params.get('drones')) || 60));
-let QUALITY = params.get('quality') === 'low' ? 'low' : 'high';
+// Pantallas pequeñas / táctiles: arrancar en modo ligero salvo que la URL diga otra cosa
+const SMALL_SCREEN = Math.min(innerWidth, innerHeight) < 600 || matchMedia('(pointer:coarse)').matches;
+let N = Math.min(150, Math.max(1, parseInt(params.get('drones')) || (SMALL_SCREEN ? 30 : 60)));
+let QUALITY = params.has('quality') ? (params.get('quality') === 'low' ? 'low' : 'high') : (SMALL_SCREEN ? 'low' : 'high');
 const LAT0 = parseFloat(params.get('lat')) || 39.4699;   // Valencia por defecto
 const LON0 = parseFloat(params.get('lon')) || -0.3763;
 const MAXS = 20, MAXF = 28, R_NEI = 16, R_SEP = 7;
@@ -250,7 +333,7 @@ controls.autoRotate = true;
 controls.autoRotateSpeed = 0.35;
 controls.maxPolarAngle = Math.PI * 0.47;
 controls.minDistance = 30;
-controls.maxDistance = 480;
+controls.maxDistance = 750;
 controls.target.set(0, 25, 0);
 // embed=1: sin zoom con rueda para que la página contenedora pueda hacer scroll sobre el iframe
 if (params.get('embed') === '1') controls.enableZoom = false;
@@ -652,6 +735,7 @@ function setMode(m, why) {
     log('sys', `MISSION: retasking swarm → ${m}${why ? ' · ' + why : ''}`);
     $('#mode').textContent = m;
     $('#bannerTxt').textContent = m;
+    syncCtrl();
     bannerEl.classList.add('show'); bannerTimer = 2.5;
   }
   orbitFromClick = false;
@@ -813,6 +897,22 @@ renderer.domElement.addEventListener('pointerup', e => {
 });
 let camMode = 'ORBIT';
 const lookTarget = V3();
+function toggleCam() {
+  camMode = camMode === 'ORBIT' ? 'FOLLOW' : 'ORBIT';
+  if (camMode === 'FOLLOW') { controls.enabled = false; lookTarget.copy(controls.target); }
+  else { controls.enabled = true; controls.target.copy(lookTarget); }
+  log('sys', `CAMERA: ${camMode === 'FOLLOW' ? 'chase cam locked on ' + focus.id : 'orbital overview'}`);
+  syncCtrl();
+}
+// Botones en pantalla (táctil / móvil)
+function syncCtrl() {
+  document.querySelectorAll('#ctrl [data-mode]').forEach(b => b.classList.toggle('on', b.dataset.mode === mode));
+  $('#bCam').classList.toggle('on', camMode === 'FOLLOW');
+  $('#bHud').classList.toggle('on', !document.body.classList.contains('min'));
+}
+document.querySelectorAll('#ctrl [data-mode]').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode, 'operator command')));
+$('#bCam').addEventListener('click', toggleCam);
+$('#bHud').addEventListener('click', () => { document.body.classList.toggle('min'); syncCtrl(); frameCamera(); });
 function setAuto(v) { auto = v; $('#auto').classList.toggle('off', !auto); log('sys', `AUTO-TASKING ${auto ? 'ENABLED' : 'DISABLED'}`); modeTimer = 0; }
 addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT') return;
@@ -822,12 +922,7 @@ addEventListener('keydown', e => {
   else if (k === 'a') setAuto(!auto);
   else if (k === 'h') document.body.classList.toggle('nohud');
   else if (k === 'f') { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(); }
-  else if (k === 'c') {
-    camMode = camMode === 'ORBIT' ? 'FOLLOW' : 'ORBIT';
-    if (camMode === 'FOLLOW') { controls.enabled = false; lookTarget.copy(controls.target); }
-    else { controls.enabled = true; controls.target.copy(lookTarget); }
-    log('sys', `CAMERA: ${camMode === 'FOLLOW' ? 'chase cam locked on ' + focus.id : 'orbital overview'}`);
-  }
+  else if (k === 'c') toggleCam();
 });
 setTimeout(() => { $('#hint').style.opacity = 0.25; }, 15000);
 
@@ -1264,15 +1359,47 @@ function frame() {
   if (nowMs - fpsT > 1000) { $('#fps').textContent = `${Math.round(frames * 1000 / (nowMs - fpsT))} FPS`; frames = 0; fpsT = nowMs; }
 }
 
+// Encuadre: centra la proyección en la zona libre (#center) y ajusta el FOV a su ancho,
+// para que la escena no quede tapada por los paneles en monitores verticales o móviles.
+const BASE_DIST = camera.position.distanceTo(controls.target);
+const MAX_T = Math.tan(THREE.MathUtils.degToRad(37));   // FOV vertical máx. 74°
+let layoutKey = '';
+function frameCamera() {
+  const hudOff = document.body.classList.contains('nohud') || document.body.classList.contains('min');
+  const c = $('#center').getBoundingClientRect();
+  const r = (hudOff || c.width < 50 || c.height < 50) ? { left: 0, top: 0, width: innerWidth, height: innerHeight } : c;
+  const dx = r.left + r.width / 2 - innerWidth / 2, dy = r.top + r.height / 2 - innerHeight / 2;
+  const t = 0.6 * innerHeight / Math.max(1, r.width);   // misma cobertura horizontal que en escritorio
+  camera.aspect = innerWidth / innerHeight;
+  camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.min(t, MAX_T)));
+  camera.setViewOffset(innerWidth, innerHeight, -dx, -dy, innerWidth, innerHeight);
+  camera.updateProjectionMatrix();
+  // si la zona es muy estrecha, alejar la cámara (solo al cambiar de layout, para no pisar el zoom del usuario)
+  const key = `${Math.round(r.width / 40)}x${Math.round(r.height / 40)}`;
+  if (key !== layoutKey && camMode === 'ORBIT') {
+    layoutKey = key;
+    // zona alta y estrecha → cámara más cenital para llenar la vista con la ciudad en vez de cielo
+    const elev = THREE.MathUtils.degToRad(THREE.MathUtils.clamp(20 + (r.height / r.width - 0.6) * 40, 20, 45));
+    const sph = new THREE.Spherical().setFromVector3(camera.position.clone().sub(controls.target));
+    sph.radius = BASE_DIST * Math.max(1, t / MAX_T);
+    sph.phi = Math.PI / 2 - elev;
+    camera.position.copy(controls.target).add(new THREE.Vector3().setFromSpherical(sph));
+  }
+}
 function onResize() {
-  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
   composer.setSize(innerWidth, innerHeight);
   bloom.setSize(innerWidth, innerHeight);
   fitAll();
+  frameCamera();
 }
 addEventListener('resize', onResize);
+new ResizeObserver(() => { fitAll(); frameCamera(); }).observe($('#center'));
+const canvasRO = new ResizeObserver(() => fitAll());
+['#map', '#horizon', '#chart'].forEach(s => canvasRO.observe($(s)));
 fitAll();
+frameCamera();
+syncCtrl();
 frame();
 </script>
 </body>

@@ -73,6 +73,7 @@ Then press **`F`** for fullscreen and leave it running.
 | `Enter` or `/` | Open the built-in terminal to type commands |
 | `Esc` | Leave the terminal |
 | Click a *Fleet Matrix* cell | Select that drone (FPV camera, horizon and telemetry) |
+| **On-screen buttons** (touch/mobile) | `PATROL` `ORBIT` `FORM` `SCAN` · `CAM` (chase) · `HUD` (hides panels, leaving just the scene and top bar) |
 
 ---
 
@@ -106,8 +107,8 @@ index.html?name=SKYNET&drones=40&quality=low&lat=40.4168&lon=-3.7038
 | Parameter | Default | Description |
 |---|---|---|
 | `name` | `HALCYON` | Project name |
-| `drones` | `60` | Number of drones (1–150) |
-| `quality` | `high` | `low` for less powerful machines |
+| `drones` | `60` (`30` on mobile/touch) | Number of drones (1–150) |
+| `quality` | `high` (`low` on mobile/touch) | `low` for less powerful machines |
 | `lat`, `lon` | Valencia (39.4699, -0.3763) | Origin of the displayed GPS coordinates |
 | `embed` | — | `1` disables wheel zoom (for embedding in an `<iframe>` without hijacking page scroll) |
 
@@ -123,6 +124,19 @@ If it runs slowly:
 The FPS counter is at the top right and is also shown by `status`.
 
 ---
+
+## 📱 Responsive
+
+The HUD rearranges itself to the screen size and orientation:
+
+| Screen | Layout |
+|---|---|
+| **Landscape** (desktop, laptop) | Side columns (status/fleet · map/FPV/focus), scene in the middle, log + telemetry at the bottom. Columns narrow on smaller screens and panels compact at heights ≤ 860 px. |
+| **Portrait monitor / tablet** | Full-width scene on top with the panels in a 3-column band below (status/fleet · map · FPV/focus), and the log and telemetry at the very bottom. |
+| **Phone portrait** | Compact bar, 6 stats in one row, scene with a corner minimap, touch buttons and a short log. |
+| **Phone landscape** | Scene, side map and touch buttons. |
+
+The 3D camera **re-frames itself** to the free area: it centers the projection with `camera.setViewOffset`, fits the FOV to the available width and, when the area is tall and narrow, pulls back and tilts more top-down. That way the panels never cover the city.
 
 ## 🧩 What's on screen
 

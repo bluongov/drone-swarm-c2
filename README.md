@@ -73,6 +73,7 @@ Después pulsa **`F`** para pantalla completa y déjalo corriendo.
 | `Enter` o `/` | Abre la terminal integrada para escribir comandos |
 | `Esc` | Sale de la terminal |
 | Clic en una celda de *Fleet Matrix* | Selecciona ese drone (cámara FPV, horizonte y telemetría) |
+| **Botones en pantalla** (táctil/móvil) | `PATROL` `ORBIT` `FORM` `SCAN` · `CAM` (persecución) · `HUD` (oculta paneles y deja solo escena + barra superior) |
 
 ---
 
@@ -106,8 +107,8 @@ index.html?name=SKYNET&drones=40&quality=low&lat=40.4168&lon=-3.7038
 | Parámetro | Por defecto | Descripción |
 |---|---|---|
 | `name` | `HALCYON` | Nombre del proyecto |
-| `drones` | `60` | Número de drones (1–150) |
-| `quality` | `high` | `low` para equipos modestos |
+| `drones` | `60` (`30` en móvil/táctil) | Número de drones (1–150) |
+| `quality` | `high` (`low` en móvil/táctil) | `low` para equipos modestos |
 | `lat`, `lon` | Valencia (39.4699, -0.3763) | Origen de las coordenadas GPS que se muestran |
 | `embed` | — | `1` desactiva el zoom con rueda (para incrustarlo en un `<iframe>` sin bloquear el scroll de la página) |
 
@@ -123,6 +124,19 @@ Si va lento:
 El contador de FPS está arriba a la derecha y también sale en `status`.
 
 ---
+
+## 📱 Responsive
+
+El HUD se reorganiza según el tamaño y la orientación de la pantalla:
+
+| Pantalla | Distribución |
+|---|---|
+| **Horizontal** (escritorio, portátil) | Columnas laterales (estado/flota · mapa/FPV/foco), escena en el centro y log + telemetría abajo. Las columnas se estrechan en pantallas pequeñas y los paneles se compactan en alturas ≤ 860 px. |
+| **Monitor vertical / tablet vertical** | Escena arriba a todo el ancho y paneles en una banda inferior de 3 columnas (estado/flota · mapa · FPV/foco), con log y telemetría al final. |
+| **Móvil vertical** | Barra compacta, 6 indicadores en una fila, escena con minimapa en la esquina, botones táctiles y log corto. |
+| **Móvil horizontal** | Escena, mapa lateral y botones táctiles. |
+
+La cámara 3D **se reencuadra sola** en la zona que queda libre: centra la proyección con `camera.setViewOffset`, ajusta el FOV al ancho disponible y, si la zona es alta y estrecha, se aleja y se vuelve más cenital. Así los paneles nunca tapan la ciudad.
 
 ## 🧩 Qué se ve en pantalla
 
