@@ -68,20 +68,24 @@ Then press **`F`** for fullscreen and leave it running.
 | `1` `2` `3` `4` | `PATROL` · `ORBIT` · `FORMATION` · `SCAN` mode |
 | `C` | Toggle between the orbital overview and the **chase camera** on the selected drone |
 | `V` | Toggle between the **3D** perspective view and the **2D** top-down view: orthographic camera from above, north up, same scene and same HUD. The minimap shows the visible area |
-| `R` | **Lock the camera**: no auto-rotation and no swarm following (press `R` again to re-enable). In 2D, with following on, the map pans towards the swarm by itself; `C` centres it on the selected drone |
+| `R` | **Lock the camera**: no auto-rotation (by default a back-and-forth sweep of ±45° around the view, see `sweep`) and no swarm following (press `R` again to re-enable). In 2D, with following on, the map pans towards the swarm by itself; `C` centres it on the selected drone |
+| `Tab` | With a second swarm, switch the selected swarm (A/B) |
 | `A` | Turn automatic mode rotation (every 50 s) on or off |
 | `H` | Hide or show the HUD (leaves only the 3D scene) |
 | `F` | Fullscreen |
 | `Enter` or `/` | Open the built-in terminal to type commands |
 | `Esc` | Leave the terminal |
 | Click a *Fleet Matrix* cell | Select that drone (FPV camera, horizon and telemetry) |
-| **On-screen buttons** (touch/mobile) | `PATROL` `ORBIT` `FORM` `SCAN` · `CAM` (chase) · `2D` (top-down view) · `LOCK` (camera lock) · `HUD` (hides panels, leaving just the scene and top bar) |
+| **On-screen buttons** (touch/mobile) | `PATROL` `ORBIT` `FORM` `SCAN` · `A`/`B` (selected swarm, only with BRAVO) · `CAM` (chase) · `2D` (top-down view) · `LOCK` (camera lock) · `HUD` (hides panels, leaving just the scene and top bar) |
 
 ---
 
 ## 💻 Built-in terminal commands
 
-The **SYSTEM LOG** panel doubles as a terminal (`c2@halcyon:~$`). Press `Enter`, type, and press `Enter` again. The `↑`/`↓` arrows browse the history.
+The bottom strip has two separate panels:
+
+- **SYSTEM LOG**: simulation events and fleet chatter. Filters `ALL` / `EVENTS` (no chatter) / `ALERTS` (warnings and errors only). Hovering it **pauses** it (`❚❚ PAUSED`) so you can scroll; leaving it goes back to `● LIVE`. Clicking a `UAV-xx` puts it in FOCUS UNIT and the FPV feed.
+- **C2 CONSOLE** (`c2@halcyon:~$`): the terminal. Press `Enter` (or `/`), type, and press `Enter` again. Replies show up here instead of getting lost in the chatter; changes with an effect (mission, fleet, camera…) are also recorded in the SYSTEM LOG. `Tab` completes commands and arguments (a second `Tab` lists options), `↑`/`↓` browse the history and the buttons below run common commands (handy on touch screens).
 
 | Command | Example | Description |
 |---|---|---|
@@ -95,8 +99,12 @@ The **SYSTEM LOG** panel doubles as a terminal (`c2@halcyon:~$`). Press `Enter`,
 | `view=2d\|3d` | `view=2d` | 2D top-down view or 3D perspective (same as `V`) |
 | `still=on\|off` | `still=on` | Locked camera: no rotation or following (same as `R`) |
 | `rotate=on\|off` · `follow=on\|off` | `rotate=off` | 3D camera auto-rotation and swarm following, separately |
+| `sweep=DEGREES` | `sweep=30` · `sweep=0` | Auto-rotation sweep amplitude (±N°); `0` = full 360° rotation |
+| `swarm2=N\|off` | `swarm2=30` | Second swarm BRAVO (1–80 drones) or recall it |
+| `role=friendly\|hostile` | `role=hostile` | BRAVO as a friendly fleet or as intruders (ALPHA intercepts) |
+| `sel=a\|b` | `sel=b` | Swarm that receives `mode=`, `orbit=`, `1-4` and clicks (same as `Tab`) |
 | `status` | `status` | Summary: active, RTB and charging drones, mode, quality and FPS |
-| `clear` | `clear` | Clear the log |
+| `clear` | `clear` · `clear=log` · `clear=all` | Clear the console, the SYSTEM LOG or both |
 
 Both `drones=40` and `drones 40` work. When the browser allows it, changes to `drones`, `name` and `quality` are saved in the URL, so they survive a refresh. Some browsers block this over `file://`; in that case use a local server.
 
@@ -118,6 +126,9 @@ index.html?name=SKYNET&drones=40&quality=low
 | `view` | `3d` | `2d` starts in the top-down view |
 | `still` | — | `1` starts with the camera locked (same as `rotate=0&follow=0`) |
 | `rotate`, `follow` | `1` | `0` turns off auto-rotation or swarm following |
+| `sweep` | `45` | Auto-rotation sweep in degrees (`0` = 360°) |
+| `swarm2` | `0` | Drones in the second swarm BRAVO (0 = off) |
+| `role2` | `friendly` | `hostile` starts BRAVO as intruders |
 | `embed` | — | `1` disables wheel zoom (for embedding in an `<iframe>` without hijacking page scroll) |
 
 ---
@@ -140,8 +151,8 @@ The HUD rearranges itself to the screen size and orientation:
 | Screen | Layout |
 |---|---|
 | **Landscape** (desktop, laptop) | Side columns (status/fleet · map/FPV/focus), scene in the middle, log + telemetry at the bottom. Columns narrow on smaller screens and panels compact at heights ≤ 860 px. |
-| **Portrait monitor / tablet** | Full-width scene on top with the panels in a 3-column band below (status/fleet · map · FPV/focus), and the log and telemetry at the very bottom. |
-| **Phone portrait** | Compact bar, 6 stats in one row, scene with a corner minimap, touch buttons and a short log. |
+| **Portrait monitor / tablet** | Full-width scene on top with the panels in a 3-column band below (status/fleet · map/telemetry · FPV/focus), and a full-width log + console at the very bottom. |
+| **Phone portrait** | Compact bar, 6 stats in one row, scene with a corner minimap, touch buttons, a short log and a one-line console. |
 | **Phone landscape** | Scene, side map and touch buttons. |
 
 The 3D camera **re-frames itself** to the free area: it centers the projection with `camera.setViewOffset`, fits the FOV to the available width and, when the area is tall and narrow, pulls back and tilts more top-down. That way the panels never cover the city.
@@ -158,14 +169,22 @@ The 3D camera **re-frames itself** to the free area: it centers the projection w
 │ FLEET MATRIX  │                                              │ FOCUS UNIT (artificial     │
 │ (bat/state    │                                              │ horizon + telemetry)       │
 │ per drone)    │                                              │                            │
-├───────────────┴──────────────────────────────────────────────┼────────────────────────────┤
-│ SYSTEM LOG + interactive terminal                            │ TELEMETRY (THRPT/ALT/LAT)  │
-└──────────────────────────────────────────────────────────────┴────────────────────────────┘
+├───────────────┴─────────────────┬────────────────────────────┼────────────────────────────┤
+│ SYSTEM LOG (filters, pause)     │ C2 CONSOLE (commands)      │ TELEMETRY (THRPT/ALT/LAT)  │
+└─────────────────────────────────┴────────────────────────────┴────────────────────────────┘
 ```
 
 - **3D scene**: the Ciutat de les Arts i les Ciències buildings and Valencia city are represented with voxels and a glowing lattice. Red warning beacons mark the top of every landmark and the 14 tallest city towers (≥ 60 m); two NFZs, a charging base with landing pads, and drones with status LEDs, strobes and trails complete the scene.
 - **Selected drone**: ring, scan cone down to the ground and a floating label. It changes every 10 s.
 - **“RETASKING SWARM” banner** whenever the mission changes.
+
+## 🛸 Second swarm (BRAVO)
+
+Optional and off by default: `swarm2=N` in the terminal or the URL (1–80 drones).
+
+- **Friendly BRAVO** (orange, `BRV-xx`): its own base NE of the Oceanogràfic (≈ 39.45458, −0.34602), missions independent from ALPHA (auto-tasking avoids both flying the same mode) and orange diamonds on the map. `Tab`, the `A/B` button or `sel=a|b` choose which swarm receives `1-4`, `mode=`, `orbit=` and ground clicks; the header marks the selected one with `▸`.
+- **Hostile BRAVO** (`role=hostile`, red, `TRK-xx`): intruders that ignore the geofence (each `GEOFENCE BREACH` is logged) and fly in three groups towards landmarks or the ALPHA base. Up to 40 % of ALPHA breaks off to intercept them (red dashed lines); an interceptor that stays within 20 m for 3 s forces the intruder back to its base (`NEUTRALIZED`), where it recharges and takes off again. Intruders cannot be commanded and are left out of the fleet stats.
+- Separation between both swarms is always on; alignment and cohesion only within each swarm.
 
 ## 🏛️ The setting: City of Arts and Sciences
 
@@ -255,12 +274,12 @@ IDLE ──(staggered delay)──► LAUNCH ──(alt>24m)──► ACTIVE ─
 - **Selected-drone telemetry**:
   - ALT, SPD, HDG, BAT and LINK are computed by the simulation and displayed in real units; RPM and ESC temperature are derived values.
   - LAT/LON are the real position coordinates, from the site origin (39.45472, −0.3525) using an equirectangular projection. The cursor shows E/N in metres.
-- **Log**: boot messages and simulation events (RTB, landings, waypoints, geofence, mode changes), plus procedural fleet chatter and SURVEY/LIDAR lines about the nearest landmark.
+- **Log**: boot messages and simulation events (RTB, landings, waypoints, geofence, mode changes), plus procedural fleet chatter and SURVEY/LIDAR lines about the nearest landmark. Chatter lines get the `chat` class so the `EVENTS` filter can hide them with CSS.
 - The text HUD updates every 250 ms. The map and horizon are drawn every frame.
 - The layout adapts to screen height: the map and FPV panel scale with `vh`.
 
 ### 5. Interactive terminal
-It is an `<input>` inside the log panel. `runCmd()` parses `command[=| ]argument`. `setDroneCount()` does the following:
+It is an `<input>` in the C2 CONSOLE panel. `runCmd()` sets `toConsole` so `log()` writes to the console (and copies `ok`/`sys`/`warn` lines to the SYSTEM LOG), and `execCmd()` parses `command[=| ]argument`. Autocomplete uses the `CMD_ARGS` table. `setDroneCount()` does the following:
 - Frees the extra drones (`dispose()` on materials and geometries).
 - Rebuilds the pads and reassigns each drone's pad.
 - Creates the new drones with a staggered takeoff.
@@ -279,12 +298,12 @@ Software rendering in a headless browser only reaches ~4 FPS, so the recording u
 
 ```bash
 npm i --no-save playwright gifsicle && npx playwright install chromium
-node tools/record-gif.mjs                                   # → frames/*.png (1600x900, 12 fps)
+node tools/record-gif.mjs                                   # → frames/*.png (1280x720, 12 fps)
 
 # GIF (optimized palette + lossy compression → ~6 MB)
 ffmpeg -framerate 12 -i frames/f%04d.png -vf "fps=8,scale=720:-1:flags=lanczos,palettegen=max_colors=64:stats_mode=diff" pal.png
 ffmpeg -framerate 12 -i frames/f%04d.png -i pal.png -lavfi "fps=8,scale=720:-1:flags=lanczos[x];[x][1:v]paletteuse=dither=none:diff_mode=rectangle" tmp.gif
-npx gifsicle -O3 --lossy=100 tmp.gif -o assets/demo.gif
+npx gifsicle -O3 --lossy=160 --colors 48 tmp.gif -o assets/demo.gif
 
 # Higher-quality MP4
 ffmpeg -framerate 12 -i frames/f%04d.png -vf scale=1280:-2 -c:v libx264 -pix_fmt yuv420p -crf 28 -movflags +faststart assets/demo.mp4

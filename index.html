@@ -87,8 +87,21 @@ html,body{width:100%;height:100%;overflow:hidden;background:#02070c;color:var(--
 #fvals{flex:1;display:grid;grid-template-columns:auto 1fr;gap:1px 8px;font-size:11px;align-content:start}
 #fvals .k{color:var(--c2)} #fvals .v{color:#fff;text-align:right}
 
-#term{grid-area:term;display:flex;flex-direction:column}
-#log{flex:1;overflow:hidden;font-size:11px;line-height:1.45}
+#term{grid-area:term;display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:10px;min-height:0;pointer-events:none}
+#pLog,#pCon{display:flex;flex-direction:column;min-height:0}
+#log,#con{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;font-size:11px;line-height:1.45;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+#log::-webkit-scrollbar,#con::-webkit-scrollbar{width:4px} #log::-webkit-scrollbar-thumb,#con::-webkit-scrollbar-thumb{background:var(--line)}
+#log .msg b{cursor:pointer} #log .msg b:hover{background:rgba(63,240,255,.2)}
+#log.f-evt .ln.chat{display:none}
+#log.f-warn .ln:not(.warn):not(.err){display:none}
+.lf i,.chip{font-style:normal;cursor:pointer;color:var(--c2);margin-left:8px;letter-spacing:.12em}
+.lf i:hover,.chip:hover{color:#fff} .lf i.on{color:var(--c)} .lf i.on::before{content:'['} .lf i.on::after{content:']'}
+#lPause{color:var(--g)} #lPause.paused{color:var(--y);animation:blink 1s steps(2) infinite}
+#con .ln{white-space:pre-wrap;word-break:break-word}
+#con .ln.cmd{margin-top:4px}
+#con .ln .ts{display:none}
+#chips{display:flex;flex-wrap:wrap;gap:2px 0;margin-top:3px;font-size:10px;overflow:hidden;max-height:16px}
+.chip{margin:0 8px 0 0;border:1px solid var(--line);padding:0 5px}
 .ln{white-space:nowrap;animation:fade .35s ease-out}
 .ts{color:#2a6f7c;margin-right:10px}
 .lv{display:inline-block;width:5ch;margin-right:8px}
@@ -101,8 +114,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:#02070c;color:var(--
 .prompt{color:var(--g)!important;white-space:nowrap}
 #cmd{flex:1;min-width:0;background:transparent;border:none;outline:none;color:#fff;font:inherit;caret-color:var(--c)}
 #cmd::placeholder{color:#1f5f6c}
-.ln.cmd .lv{color:#fff} .ln.cmd .msg{color:#fff}
-#term{cursor:text}
+.ln.cmd .lv{color:var(--g)} .ln.cmd .msg{color:#fff}
+#pCon{cursor:text} #pCon .cursor-line{border-top:1px solid var(--line);padding-top:3px;margin-top:2px;font-size:11px}
+#pCon .prompt{margin-right:8px}
+#pCon .title{gap:12px} #pCon .title span:last-child{overflow:hidden;text-overflow:ellipsis}
 
 #charts{grid-area:charts;display:flex;flex-direction:column}
 #chart{flex:1;width:100%;min-height:0;display:block}
@@ -144,8 +159,8 @@ body.min #hud > :not(#top):not(#center), body.min .col > *{display:none}
 /* Monitor vertical / tablet en vertical: escena arriba a todo el ancho, paneles en banda inferior */
 @media (orientation:portrait) and (min-width:700px){
   #hud{grid-template-columns:repeat(3,minmax(0,1fr));
-    grid-template-rows:46px minmax(0,1fr) auto auto clamp(120px,11vh,190px);
-    grid-template-areas:"top top top" "center center center" "stats map fpv" "fleet map focus" "term term charts"}
+    grid-template-rows:46px minmax(0,1fr) auto auto clamp(80px,7vh,140px) clamp(130px,12vh,230px);
+    grid-template-areas:"top top top" "center center center" "stats map fpv" "fleet map focus" "fleet charts focus" "term term term"}
   .col{display:contents}
   #pStats{grid-area:stats} #pFleet{grid-area:fleet} #pMap{grid-area:map;display:flex;flex-direction:column} #fpvp{grid-area:fpv} #pFocus{grid-area:focus}
   #map{margin:auto}
@@ -184,9 +199,11 @@ body.min #hud > :not(#top):not(#center), body.min .col > *{display:none}
   .stat{padding:3px 4px;min-width:0} .stat .l{font-size:7px;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:clip}
   .stat .v{font-size:13px;white-space:nowrap} .stat .v small{font-size:8px}
   #pMap{grid-area:center;justify-self:end;align-self:start;width:min(38vw,170px);z-index:1}
-  #term{height:98px;padding:6px 8px} #term .title{display:none}
-  #log{font-size:9.5px} .ln:not(.cursor-line) .ts{display:none} .lv{width:4ch;margin-right:5px}
-  #ctrl{bottom:6px;gap:3px} #ctrl button{padding:0 6px;letter-spacing:.05em} #ctrl .sep{margin:4px 0}
+  #term{grid-template-columns:minmax(0,1fr);gap:6px}
+  #pLog,#pCon{padding:5px 8px} #term .title,#chips{display:none}
+  #log{height:52px;flex:none} #con{height:26px;flex:none}
+  #log,#con{font-size:9.5px} .ln:not(.cursor-line) .ts{display:none} .lv{width:4ch;margin-right:5px}
+  #ctrl{bottom:6px;gap:3px} #ctrl button{padding:0 5px;letter-spacing:.03em} #ctrl .sep{margin:4px 0}
 }
 /* Móvil horizontal */
 @media (max-height:500px) and (orientation:landscape){
@@ -209,7 +226,7 @@ body.min #hud > :not(#top):not(#center), body.min .col > *{display:none}
 <div id="hud">
   <header class="panel" id="top">
     <div class="brand"><span class="logo">◈</span>PROJECT <b id="pname"></b> <span class="dim">// AUTONOMOUS SWARM C2</span></div>
-    <div class="mode">MODE<b id="mode">PATROL</b><span id="auto" class="tag">AUTO</span></div>
+    <div class="mode">MODE<b id="mode">PATROL</b><span id="mode2"></span><span id="auto" class="tag">AUTO</span></div>
     <div class="right">
       <span class="live"><i></i>LIVE</span>
       <span>UTC <b id="clock">--:--:--</b></span>
@@ -238,8 +255,8 @@ body.min #hud > :not(#top):not(#center), body.min .col > *{display:none}
 
   <div id="center">
     <div id="banner"><div class="a">▲ RETASKING SWARM ▲</div><div class="b" id="bannerTxt">PATROL</div></div>
-    <div id="hint">[ENTER] terminal · [CLICK] waypoint/objetivo · [1-4] modo · [C] cámara · [V] vista 2D/3D · [R] fijar cámara · [A] auto · [H] HUD · [F] pantalla completa · <span id="cursor">—</span></div>
-    <div id="ctrl"><button data-mode="PATROL">PATROL</button><button data-mode="ORBIT">ORBIT</button><button data-mode="FORMATION">FORM</button><button data-mode="SCAN">SCAN</button><span class="sep"></span><button id="bCam">CAM</button><button id="b2d">2D</button><button id="bStill">LOCK</button><button id="bHud">HUD</button></div>
+    <div id="hint">[ENTER] terminal · [CLICK] waypoint/objetivo · [1-4] modo · [Tab] enjambre A/B · [C] cámara · [V] vista 2D/3D · [R] fijar cámara · [A] auto · [H] HUD · [F] pantalla completa · <span id="cursor">—</span></div>
+    <div id="ctrl"><button data-mode="PATROL">PATROL</button><button data-mode="ORBIT">ORBIT</button><button data-mode="FORMATION">FORM</button><button data-mode="SCAN">SCAN</button><span class="sep"></span><button id="bSw" hidden>A</button><button id="bCam">CAM</button><button id="b2d">2D</button><button id="bStill">LOCK</button><button id="bHud">HUD</button></div>
   </div>
 
   <aside class="col" id="right">
@@ -257,10 +274,18 @@ body.min #hud > :not(#top):not(#center), body.min .col > *{display:none}
     </section>
   </aside>
 
-  <section class="panel" id="term">
-    <div class="title"><span>SYSTEM LOG</span><span>tail -f /var/log/swarm/c2.log</span></div>
-    <div id="log"></div>
-  </section>
+  <div id="term">
+    <section class="panel" id="pLog">
+      <div class="title"><span>SYSTEM LOG</span><span class="lf"><i data-f="all" class="on">ALL</i><i data-f="evt">EVENTS</i><i data-f="warn">ALERTS</i><i id="lPause">● LIVE</i></span></div>
+      <div id="log"></div>
+    </section>
+    <section class="panel" id="pCon">
+      <div class="title"><span>C2 CONSOLE</span><span>[Tab] autocompletar · [↑↓] historial</span></div>
+      <div id="con"></div>
+      <div class="cursor-line"><span class="prompt" id="prompt"></span><input id="cmd" autocomplete="off" spellcheck="false" placeholder="escribe help · p.ej. drones=40"></div>
+      <div id="chips"></div>
+    </section>
+  </div>
 
   <section class="panel" id="charts">
     <div class="title"><span>TELEMETRY</span><span class="legend"><i style="color:var(--c)">THRPT</i><i style="color:var(--g)">ALT</i><i style="color:var(--y)">LAT</i></span></div>
@@ -297,6 +322,11 @@ let QUALITY = params.has('quality') ? (params.get('quality') === 'low' ? 'low' :
 let VIEW = params.get('view') === '2d' ? '2D' : '3D';
 let ROTATE = params.get('still') !== '1' && params.get('rotate') !== '0';
 let FOLLOW = params.get('still') !== '1' && params.get('follow') !== '0';
+// segundo enjambre (BRAVO): swarm2=N (0 = apagado, por defecto) · role2=hostile lo convierte en intrusos
+let N2 = Math.min(80, Math.max(0, parseInt(params.get('swarm2')) || 0));
+const ROLE2 = params.get('role2') === 'hostile' ? 'hostile' : 'friendly';
+// auto-rotación: barrido de ida y vuelta de ±SWEEP grados alrededor de la vista inicial (0 = giro completo de 360°)
+let SWEEP = params.has('sweep') ? Math.min(180, Math.max(0, parseFloat(params.get('sweep')) || 0)) : 45;
 const AREA = 280;                       // semilado de la zona de operaciones (1 unidad = 2 m → ±560 m)
 const MAXS = 20, MAXF = 28, R_NEI = 16, R_SEP = 7;
 const MODES = ['PATROL', 'ORBIT', 'FORMATION', 'SCAN'];
@@ -305,6 +335,8 @@ const MODE_W = {
   ORBIT:     { sep: 2.4, ali: 0.2, coh: 0.0, goal: 1.6, arrive: 18, minS: 0 },
   FORMATION: { sep: 2.2, ali: 0.3, coh: 0.0, goal: 1.8, arrive: 18, minS: 0 },
   SCAN:      { sep: 2.2, ali: 0.2, coh: 0.0, goal: 1.8, arrive: 18, minS: 0 },
+  INTRUDE:   { sep: 2.0, ali: 0.7, coh: 0.6, goal: 1.1, arrive: 10, minS: 6 },   // enjambre BRAVO en rol hostil
+  INTERCEPT: { sep: 1.6, ali: 0.0, coh: 0.0, goal: 2.4, arrive: 6,  minS: 0 },   // interceptor de ALPHA
 };
 const STATE_COLOR = { ACTIVE: 0x3ff0ff, RTB: 0xffcc33, LANDING: 0xffcc33, CHARGING: 0x4dff9a, LAUNCH: 0xffffff, IDLE: 0x557788 };
 const STATE_SHORT = { ACTIVE: 'ACT', RTB: 'RTB', LANDING: 'LND', CHARGING: 'CHG', LAUNCH: 'LCH', IDLE: 'IDL' };
@@ -336,7 +368,7 @@ const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.5, 30
 camera.position.set(110, 140, -180);   // from the Túria park (NE), looking at the complex
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
-controls.autoRotate = ROTATE;
+controls.autoRotate = ROTATE && !SWEEP;           // con SWEEP > 0 el giro lo hace updateCamera (ida y vuelta)
 controls.autoRotateSpeed = 0.35;
 controls.maxPolarAngle = Math.PI * 0.47;
 controls.minDistance = 30;
@@ -635,45 +667,15 @@ const obstacles = [];
   addNfz(x, z, r, 90, 'NFZ-B', 'TFR');
 }
 
-// ================= BASE / PADS =================
-const pads = [], PSP = 4.5;
-let BASE_R = 10, padMesh = null, baseRing = null;
+// ================= BASE / PADS / MISSION MARKERS =================
+// geometría compartida; cada enjambre crea sus plataformas y marcadores (ver SWARMS)
+const PSP = 4.5;
 const padGeo = new THREE.PlaneGeometry(3.2, 3.2).rotateX(-Math.PI / 2);
-const padMat = new THREE.MeshBasicMaterial({ color: 0x0f5d6e, transparent: true, opacity: 0.75 });
-const baseRingMat = new THREE.MeshBasicMaterial({ color: 0x4dff9a, transparent: true, opacity: 0.7 });
-function buildPads(n) {
-  const cols = Math.ceil(Math.sqrt(n)), rows = Math.ceil(n / cols);
-  pads.length = 0;
-  for (let i = 0; i < n; i++) pads.push(V3((i % cols - (cols - 1) / 2) * PSP, 0.6, (Math.floor(i / cols) - (rows - 1) / 2) * PSP));
-  BASE_R = Math.max(cols, rows) * PSP * 0.75 + 4;
-  if (padMesh) { scene.remove(padMesh); padMesh.dispose(); }
-  padMesh = new THREE.InstancedMesh(padGeo, padMat, n);
-  const m4 = new THREE.Matrix4();
-  pads.forEach((p, i) => { m4.makeTranslation(p.x, 0.08, p.z); padMesh.setMatrixAt(i, m4); });
-  scene.add(padMesh);
-  if (baseRing) { scene.remove(baseRing); baseRing.geometry.dispose(); }
-  baseRing = new THREE.Mesh(new THREE.RingGeometry(BASE_R, BASE_R + 0.7, 72).rotateX(-Math.PI / 2), baseRingMat);
-  baseRing.position.y = 0.1; scene.add(baseRing);
-}
-buildPads(N);
-
-// ================= MARKERS =================
-const routeGroup = new THREE.Group(); scene.add(routeGroup);
-const orbitMarker = new THREE.Group(); scene.add(orbitMarker);
-{
-  const g1 = new THREE.RingGeometry(10, 10.8, 64); g1.rotateX(-Math.PI / 2);
-  const g2 = new THREE.RingGeometry(16, 16.4, 6); g2.rotateX(-Math.PI / 2);
-  const mat = new THREE.MeshBasicMaterial({ color: 0xff9f33, transparent: true, opacity: 0.8, side: THREE.DoubleSide });
-  orbitMarker.add(new THREE.Mesh(g1, mat), new THREE.Mesh(g2, mat));
-  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 90, 8), new THREE.MeshBasicMaterial({ color: 0xff9f33, transparent: true, opacity: 0.5 }));
-  beam.position.y = 45; orbitMarker.add(beam);
-}
-const leaderMarker = new THREE.Mesh(new THREE.OctahedronGeometry(2.2), new THREE.MeshBasicMaterial({ color: 0xb58cff, wireframe: true }));
-scene.add(leaderMarker);
-const scanBand = new THREE.Mesh(new THREE.PlaneGeometry(2 * AREA - 20, 3).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x4dff9a, transparent: true, opacity: 0.55, depthWrite: false }));
-scanBand.position.y = 0.3; scene.add(scanBand);
-const scanWall = new THREE.Mesh(new THREE.PlaneGeometry(2 * AREA - 20, 70), new THREE.MeshBasicMaterial({ color: 0x4dff9a, transparent: true, opacity: 0.035, side: THREE.DoubleSide, depthWrite: false }));
-scene.add(scanWall);
+const orbitRingG1 = new THREE.RingGeometry(10, 10.8, 64).rotateX(-Math.PI / 2), orbitRingG2 = new THREE.RingGeometry(16, 16.4, 6).rotateX(-Math.PI / 2);
+const orbitBeamG = new THREE.CylinderGeometry(0.35, 0.35, 90, 8).translate(0, 45, 0);
+const leaderG = new THREE.OctahedronGeometry(2.2);
+const scanBandG = new THREE.PlaneGeometry(2 * AREA - 20, 3).rotateX(-Math.PI / 2), scanWallG = new THREE.PlaneGeometry(2 * AREA - 20, 70);
+const wpOctG = new THREE.OctahedronGeometry(1.6), wpRingG = new THREE.RingGeometry(4, 4.5, 32).rotateX(-Math.PI / 2);
 
 const hoverRing = new THREE.Mesh(new THREE.RingGeometry(3, 3.5, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 }));
 hoverRing.visible = false; scene.add(hoverRing);
@@ -715,13 +717,13 @@ const TL = 40;
 // temp vectors
 const _sep = V3(), _ali = V3(), _coh = V3(), _des = V3(), _acc = V3(), _d = V3(), _g = V3();
 
-let T = 0, mode = 'PATROL', neiSum = 0, neiCnt = 0;
+let T = 0, neiSum = 0, neiCnt = 0, auto = true, lastInteraction = -99;
 
 class Drone {
-  constructor(i, delay) {
-    this.i = i;
-    this.id = 'UAV-' + pad2(i + 1);
-    this.pad = pads[i];
+  constructor(sw, i, delay) {
+    this.sw = sw; this.i = i;
+    this.pad = sw.pads[i];
+    this.target = null; this.hit = 0;                // ALPHA interceptor: hostile track being escorted
     this.pos = this.pad.clone();
     this.vel = V3(); this.lastAcc = V3(); this.goal = V3(0, 40, 0);
     this.state = 'IDLE';
@@ -746,7 +748,7 @@ class Drone {
     for (let k = 0; k < TL; k++) {
       tp.set([this.pos.x, this.pos.y, this.pos.z], k * 3);
       const f = Math.pow(1 - k / TL, 1.6);
-      tc.set([0.25 * f, 0.94 * f, 1.0 * f], k * 3);
+      tc.set([sw.style.trail[0] * f, sw.style.trail[1] * f, sw.style.trail[2] * f], k * 3);
     }
     const tg = new THREE.BufferGeometry();
     tg.setAttribute('position', new THREE.BufferAttribute(tp, 3));
@@ -756,7 +758,15 @@ class Drone {
     scene.add(this.trail);
   }
 
-  setState(s) { this.state = s; this.ledMat.color.setHex(STATE_COLOR[s]); }
+  // BRAVO drones are BRV-xx; when BRAVO turns hostile they become unknown tracks TRK-xx
+  get id() { return (this.sw.hostile ? 'TRK' : this.sw.prefix) + '-' + pad2(this.i + 1); }
+  get padName() { return (this.sw.key === 'A' ? '' : 'B-') + 'PAD-' + pad2(this.i + 1); }
+  setState(s) { this.state = s; this.ledMat.color.setHex(s === 'ACTIVE' ? this.sw.style.led : STATE_COLOR[s]); }
+  restyle() {
+    const c = this.trail.geometry.attributes.color, t = this.sw.style.trail;
+    for (let k = 0; k < TL; k++) { const f = Math.pow(1 - k / TL, 1.6); c.setXYZ(k, t[0] * f, t[1] * f, t[2] * f); }
+    c.needsUpdate = true; this.setState(this.state);
+  }
 
   dispose() {
     scene.remove(this.group, this.trail);
@@ -787,7 +797,7 @@ class Drone {
         this.pos.z += (this.pad.z - this.pos.z) * Math.min(1, dt * 3);
         this.vel.set(0, -6, 0);
         this.pos.y -= 6 * dt;
-        if (this.pos.y <= this.pad.y) { this.pos.y = this.pad.y; this.setState('CHARGING'); log('ok', `${this.id} touchdown on PAD-${pad2(this.i + 1)} · charging`); }
+        if (this.pos.y <= this.pad.y) { this.pos.y = this.pad.y; this.setState('CHARGING'); log('ok', `${this.id} touchdown on ${this.padName} · charging`); }
         break;
       case 'ACTIVE':
       case 'RTB':
@@ -798,9 +808,9 @@ class Drone {
     this.battery = Math.max(0, this.battery);
     if (this.state === 'ACTIVE' && this.battery < 15) {
       this.setState('RTB');
-      log('warn', `${this.id} battery ${this.battery.toFixed(1)}% · RTB authorized → PAD-${pad2(this.i + 1)}`);
+      log('warn', `${this.id} battery ${this.battery.toFixed(1)}% · RTB authorized → ${this.padName}`);
     }
-    const dist = Math.hypot(this.pos.x, this.pos.z);
+    const dist = Math.hypot(this.pos.x - this.sw.base.x, this.pos.z - this.sw.base.z);
     this.link = clamp(this.link + (clamp(100 - dist * 0.09 + Math.sin(T * 0.7 + this.phase) * 4, 40, 100) - this.link) * dt * 2, 0, 100);
     this.temp += ((this.state === 'ACTIVE' ? 44 : this.state === 'CHARGING' ? 36 : 40) + Math.sin(T + this.phase) * 2 - this.temp) * dt * 0.2;
     this.orient(dt);
@@ -809,7 +819,8 @@ class Drone {
 
   flock(dt, flying) {
     const rtb = this.state === 'RTB';
-    const W = rtb ? { sep: 2.2, ali: 0, coh: 0, goal: 1.6, arrive: 25, minS: 0 } : MODE_W[mode];
+    const hostile = this.sw.hostile;
+    const W = rtb ? { sep: 2.2, ali: 0, coh: 0, goal: 1.6, arrive: 25, minS: 0 } : this.target ? MODE_W.INTERCEPT : MODE_W[hostile ? 'INTRUDE' : this.sw.mode];
     _sep.set(0, 0, 0); _ali.set(0, 0, 0); _coh.set(0, 0, 0);
     let nA = 0, nS = 0;
     for (const o of flying) {
@@ -817,11 +828,11 @@ class Drone {
       _d.subVectors(this.pos, o.pos);
       const dist = _d.length();
       if (dist < R_NEI) {
-        if (!rtb && o.state === 'ACTIVE') { _ali.add(o.vel); _coh.add(o.pos); nA++; }
+        if (!rtb && o.state === 'ACTIVE' && o.sw === this.sw) { _ali.add(o.vel); _coh.add(o.pos); nA++; }   // flock only with own swarm
         if (dist < R_SEP && dist > 0.001) { _sep.addScaledVector(_d, 1 / (dist * dist)); nS++; }
       }
     }
-    if (!rtb) { neiSum += nA; neiCnt++; }
+    if (!rtb && !hostile) { neiSum += nA; neiCnt++; }
     _acc.set(0, 0, 0);
     let sepW = W.sep;
     if (rtb && Math.hypot(this.pos.x - this.pad.x, this.pos.z - this.pad.z) < 15) sepW = 0.3;
@@ -839,8 +850,14 @@ class Drone {
       _des.setLength(MAXS * Math.min(1, gd / W.arrive)).sub(this.vel);
       limit(_des, MAXF); _acc.addScaledVector(_des, W.goal);
     }
-    // geofence (NFZ cylinders)
+    // geofence (NFZ cylinders) · hostile tracks ignore it (and get reported)
     for (const o of obstacles) {
+      if (hostile) {
+        if (Math.hypot(this.pos.x - o.x, this.pos.z - o.z) < o.r && this.pos.y < o.h && T - this.nfzT > 25) {
+          this.nfzT = T; log('err', `GEOFENCE BREACH: ${this.id} inside ${o.name} (${o.label}) · alt ${(this.pos.y * M_PER_U).toFixed(0)}m`);
+        }
+        continue;
+      }
       const dx = this.pos.x - o.x, dz = this.pos.z - o.z;
       const d = Math.hypot(dx, dz) || 0.01;
       const m = o.r + 14;
@@ -875,13 +892,14 @@ class Drone {
     this.vel.addScaledVector(_acc, dt);
     const spd = this.vel.length();
     const minS = rtb ? 0 : W.minS;
-    if (spd > MAXS) this.vel.multiplyScalar(MAXS / spd);
+    const vmax = this.target ? MAXS * 1.35 : hostile ? MAXS * 0.85 : MAXS;   // interceptors are faster than the tracks
+    if (spd > vmax) this.vel.multiplyScalar(vmax / spd);
     else if (spd < minS && spd > 0.001) this.vel.multiplyScalar(minS / spd);
     this.pos.addScaledVector(this.vel, dt);
 
     if (rtb && Math.hypot(this.pos.x - this.pad.x, this.pos.z - this.pad.z) < 2.5) {
       this.setState('LANDING');
-      log('info', `${this.id} over PAD-${pad2(this.i + 1)} · initiating auto-land`);
+      log('info', `${this.id} over ${this.padName} · initiating auto-land`);
     }
   }
 
@@ -913,27 +931,19 @@ class Drone {
     a.needsUpdate = true;
   }
 }
-const drones = Array.from({ length: N }, (_, i) => new Drone(i));
-
-// ================= MISSION LOGIC =================
-let waypoints = [], wpIdx = 0, routeMats = [];
-const orbitCenter = V3();
-const leader = V3(), leaderVel = V3(1, 0, 0);
-let sweepZ = 0, modeTimer = 0, auto = true, lastAssign = -99, lastActiveCount = -1, orbitFromClick = false;
-let orbitR0 = 36, orbitAlt0 = 30;                 // ring radius / altitude of the inner orbit (fit to the target)
-function orbitLandmark(l) {
-  orbitCenter.set(l.x, 0, l.z);
-  orbitR0 = clamp(l.r + 12, 30, 90);
-  orbitAlt0 = l.id === 'assut' ? l.h + 8 : clamp(l.h * 0.6, 26, 70);   // bridge: stay above the cable fan
-}
-function orbitPoint(p) {                         // operator click: snap to a landmark if it was clicked
-  const l = orbitTargets.find(l => Math.hypot(l.x - p.x, l.z - p.z) < Math.max(l.r, 16));
-  if (l) { orbitLandmark(l); return l.name; }
-  orbitCenter.set(p.x, 0, p.z); orbitR0 = 36; orbitAlt0 = Math.max(30, topNear(p.x, p.z, 20) + 10);
-  return null;
-}
+// ================= SWARMS =================
+// ALPHA = our fleet (base in the Túria gardens). BRAVO = optional second fleet (swarm2=N, off by default) with its own
+// base NE of the Oceanogràfic and its own missions. role=hostile turns BRAVO into unknown intruders (TRK-xx) that
+// ignore the geofence and head for the landmarks, while ALPHA detaches interceptors that escort them down.
+const SW_STYLE = {
+  A: { led: 0x3ff0ff, trail: [0.25, 0.94, 1.0], route: 0xffcc33, base: 0x4dff9a, pad: 0x0f5d6e, mark: 0xff9f33, lead: 0xb58cff, scan: 0x4dff9a, css: '255,204,51', dot: '#3ff0ff' },
+  B: { led: 0xffa040, trail: [1.0, 0.6, 0.22], route: 0xff9f40, base: 0xffa040, pad: 0x6e4a12, mark: 0xffd060, lead: 0xffa040, scan: 0xffa040, css: '255,159,64', dot: '#ffa040' },
+  H: { led: 0xff3344, trail: [1.0, 0.18, 0.24], route: 0xff3344, base: 0xff3344, pad: 0x6e1420, mark: 0xff3344, lead: 0xff3344, scan: 0xff3344, css: '255,77,94', dot: '#ff4d5e' },
+};
+const BASE_B = V3(188, 0, 128);          // open ground NE of the Oceanogràfic (searched in the OSM raster: no buildings, water or roads)
+const bannerEl = $('#banner');
+let bannerTimer = 0;
 const safeAlt = (x, z, y) => Math.min(95, Math.max(y, topNear(x, z, 10) + 12));
-
 function outOfNfz(p) {
   for (const o of obstacles) if (o.type === 'NFZ') {
     const dx = p.x - o.x, dz = p.z - o.z, d = Math.hypot(dx, dz) || 1;
@@ -941,103 +951,335 @@ function outOfNfz(p) {
   }
   return p;
 }
-function genRoute() {
-  waypoints = [];
-  const n = 6, a0 = rand(0, Math.PI * 2);
-  for (let i = 0; i < n; i++) {
-    const a = a0 + i / n * Math.PI * 2 + rand(-0.3, 0.3), r = rand(80, AREA - 30);
-    const w = outOfNfz(V3(Math.cos(a) * r, 0, Math.sin(a) * r));
-    w.y = safeAlt(w.x, w.z, rand(30, 52));
-    waypoints.push(w);
+
+class Swarm {
+  constructor(key, name, prefix, base) {
+    Object.assign(this, {
+      key, name, prefix, base, hostile: false, drones: [], pads: [], baseR: 10, padMesh: null, baseRing: null, active: [],
+      mode: 'PATROL', modeTimer: key === 'A' ? 0 : -25, lastAssign: -99, lastActiveCount: -1, orbitFromClick: false,
+      waypoints: [], wpIdx: 0, routeMats: [], orbitCenter: V3(), orbitR0: 36, orbitAlt0: 30,
+      leader: V3(), leaderVel: V3(1, 0, 0), sweepZ: 0, ph: key === 'A' ? 0 : 2.1, objectives: [], objT: -99, threatT: -99,
+    });
+    this.padMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.75 });
+    this.ringMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.7 });
+    this.markMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.8, side: THREE.DoubleSide });
+    this.beamMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.5 });
+    this.leadMat = new THREE.MeshBasicMaterial({ wireframe: true });
+    this.bandMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.55, depthWrite: false });
+    this.wallMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.035, side: THREE.DoubleSide, depthWrite: false });
+    this.routeGroup = new THREE.Group();
+    this.orbitMarker = new THREE.Group();
+    this.orbitMarker.add(new THREE.Mesh(orbitRingG1, this.markMat), new THREE.Mesh(orbitRingG2, this.markMat), new THREE.Mesh(orbitBeamG, this.beamMat));
+    this.leaderMarker = new THREE.Mesh(leaderG, this.leadMat);
+    this.scanBand = new THREE.Mesh(scanBandG, this.bandMat); this.scanBand.position.y = 0.3;
+    this.scanWall = new THREE.Mesh(scanWallG, this.wallMat);
+    this.markers = [this.routeGroup, this.orbitMarker, this.leaderMarker, this.scanBand, this.scanWall];
+    scene.add(...this.markers);
+    this.restyle();
   }
-  wpIdx = 0; rebuildRoute();
-}
-function rebuildRoute() {
-  routeGroup.clear(); routeMats = [];
-  const pts = waypoints.map(w => w.clone()); pts.push(waypoints[0].clone());
-  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineDashedMaterial({ color: 0xffcc33, dashSize: 3, gapSize: 3, transparent: true, opacity: 0.6 }));
-  line.computeLineDistances(); routeGroup.add(line);
-  const oct = new THREE.OctahedronGeometry(1.6);
-  const ringG = new THREE.RingGeometry(4, 4.5, 32).rotateX(-Math.PI / 2);
-  waypoints.forEach(w => {
-    const mat = new THREE.MeshBasicMaterial({ color: 0xffcc33, transparent: true, opacity: 0.35 });
-    routeMats.push(mat);
-    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, w.y, 6), mat); beam.position.set(w.x, w.y / 2, w.z);
-    const top = new THREE.Mesh(oct, mat); top.position.copy(w);
-    const ring = new THREE.Mesh(ringG, mat); ring.position.set(w.x, 0.3, w.z);
-    routeGroup.add(beam, top, ring);
-  });
-}
-const bannerEl = $('#banner');
-let bannerTimer = 0;
-function setMode(m, why) {
-  if (m !== mode) {
-    mode = m;
-    if (m === 'ORBIT' && !orbitFromClick) {
-      const b = pick(orbitTargets); orbitLandmark(b);
-      why = why || `target ${b.name}`;
+  get style() { return SW_STYLE[this.hostile ? 'H' : this.key]; }
+  get modeLabel() { return this.hostile ? 'INTRUDE' : this.mode; }
+  restyle() {
+    const s = this.style;
+    this.padMat.color.setHex(s.pad); this.ringMat.color.setHex(s.base);
+    this.markMat.color.setHex(s.mark); this.beamMat.color.setHex(s.mark); this.leadMat.color.setHex(s.lead);
+    this.bandMat.color.setHex(s.scan); this.wallMat.color.setHex(s.scan);
+    this.drones.forEach(d => d.restyle());
+    if (this.waypoints.length) this.rebuildRoute();
+  }
+  buildPads(n) {
+    const cols = Math.max(1, Math.ceil(Math.sqrt(n))), rows = Math.max(1, Math.ceil(n / cols)), b = this.base;
+    this.pads.length = 0;
+    for (let i = 0; i < n; i++) this.pads.push(V3(b.x + (i % cols - (cols - 1) / 2) * PSP, 0.6, b.z + (Math.floor(i / cols) - (rows - 1) / 2) * PSP));
+    this.baseR = Math.max(cols, rows) * PSP * 0.75 + 4;
+    if (this.padMesh) { scene.remove(this.padMesh); this.padMesh.dispose(); this.padMesh = null; }
+    if (this.baseRing) { scene.remove(this.baseRing); this.baseRing.geometry.dispose(); this.baseRing = null; }
+    if (!n) return;
+    this.padMesh = new THREE.InstancedMesh(padGeo, this.padMat, n);
+    const m4 = new THREE.Matrix4();
+    this.pads.forEach((p, i) => { m4.makeTranslation(p.x, 0.08, p.z); this.padMesh.setMatrixAt(i, m4); });
+    scene.add(this.padMesh);
+    this.baseRing = new THREE.Mesh(new THREE.RingGeometry(this.baseR, this.baseR + 0.7, 72).rotateX(-Math.PI / 2), this.ringMat);
+    this.baseRing.position.set(b.x, 0.1, b.z); scene.add(this.baseRing);
+  }
+  setCount(n, delay0 = 0.8) {
+    const prev = this.drones.length;
+    while (this.drones.length > n) this.drones.pop().dispose();
+    this.buildPads(n);
+    this.drones.forEach(d => { d.pad = this.pads[d.i]; if (d.state === 'IDLE' || d.state === 'CHARGING') d.pos.copy(d.pad); });
+    for (let i = this.drones.length; i < n; i++) this.drones.push(new Drone(this, i, delay0 + (i - prev) * (delay0 > 0.5 ? 0.12 : 0.08)));
+    this.lastActiveCount = -1;
+    refreshDrones();
+  }
+  dispose() {
+    this.setCount(0);
+    scene.remove(...this.markers);
+    [this.padMat, this.ringMat, this.markMat, this.beamMat, this.leadMat, this.bandMat, this.wallMat].forEach(m => m.dispose());
+  }
+  genRoute() {
+    this.waypoints = [];
+    const n = 6, a0 = rand(0, Math.PI * 2);
+    for (let i = 0; i < n; i++) {
+      const a = a0 + i / n * Math.PI * 2 + rand(-0.3, 0.3), r = rand(80, AREA - 30);
+      const w = outOfNfz(V3(Math.cos(a) * r, 0, Math.sin(a) * r));
+      w.y = safeAlt(w.x, w.z, rand(30, 52) + (this.key === 'B' ? 10 : 0));
+      this.waypoints.push(w);
     }
-    if (m === 'PATROL') genRoute();
-    lastAssign = -99;
-    log('sys', `MISSION: retasking swarm → ${m}${why ? ' · ' + why : ''}`);
-    $('#mode').textContent = m;
-    $('#bannerTxt').textContent = m;
-    syncCtrl();
-    bannerEl.classList.add('show'); bannerTimer = 2.5;
+    this.wpIdx = 0; this.rebuildRoute();
   }
-  orbitFromClick = false;
-  modeTimer = 0;
+  rebuildRoute() {
+    const g = this.routeGroup, col = this.style.route;
+    g.children.forEach(o => { if (o.isLine) o.geometry.dispose(); });
+    this.routeMats.forEach(m => m.dispose());
+    g.clear(); this.routeMats = [];
+    const pts = this.waypoints.map(w => w.clone()); pts.push(this.waypoints[0].clone());
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineDashedMaterial({ color: col, dashSize: 3, gapSize: 3, transparent: true, opacity: 0.6 }));
+    line.computeLineDistances(); g.add(line); this.routeMats.push(line.material);
+    this.waypoints.forEach(w => {
+      const mat = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.35 });
+      this.routeMats.push(mat);
+      const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, w.y, 6), mat); beam.position.set(w.x, w.y / 2, w.z);
+      const top = new THREE.Mesh(wpOctG, mat); top.position.copy(w);
+      const ring = new THREE.Mesh(wpRingG, mat); ring.position.set(w.x, 0.3, w.z);
+      g.add(beam, top, ring);
+    });
+  }
+  orbitLandmark(l) {
+    this.orbitCenter.set(l.x, 0, l.z);
+    this.orbitR0 = clamp(l.r + 12, 30, 90) + (this.key === 'B' ? 8 : 0);
+    this.orbitAlt0 = l.id === 'assut' ? l.h + 8 : clamp(l.h * 0.6, 26, 70);   // bridge: stay above the cable fan
+  }
+  orbitPoint(p) {                                 // operator click: snap to a landmark if it was clicked
+    const l = orbitTargets.find(l => Math.hypot(l.x - p.x, l.z - p.z) < Math.max(l.r, 16));
+    if (l) { this.orbitLandmark(l); return l.name; }
+    this.orbitCenter.set(p.x, 0, p.z); this.orbitR0 = 36; this.orbitAlt0 = Math.max(30, topNear(p.x, p.z, 20) + 10);
+    return null;
+  }
+  setMode(m, why) {
+    if (this.hostile) return;
+    if (m !== this.mode) {
+      this.mode = m;
+      if (m === 'ORBIT' && !this.orbitFromClick) {
+        const other = this === SA ? SB : SA, busy = other && !other.hostile && other.mode === 'ORBIT' ? other.orbitCenter : null;
+        const opts = orbitTargets.filter(t => !busy || Math.hypot(t.x - busy.x, t.z - busy.z) > 1);
+        const b = pick(opts.length ? opts : orbitTargets); this.orbitLandmark(b);
+        why = why || `target ${b.name}`;
+      }
+      if (m === 'PATROL') this.genRoute();
+      this.lastAssign = -99;
+      log('sys', `MISSION: retasking ${SB ? this.name : 'swarm'} → ${m}${why ? ' · ' + why : ''}`);
+      $('#bannerTxt').textContent = SB ? `${this.name} · ${m}` : m;
+      bannerEl.classList.add('show'); bannerTimer = 2.5;
+      updateModeLabels(); syncCtrl();
+    }
+    this.orbitFromClick = false;
+    this.modeTimer = 0;
+  }
+  assignSlots(active) {
+    const arr = active.slice(), oc = this.orbitCenter, mode = this.mode;
+    if (mode === 'SCAN') arr.sort((a, b) => a.pos.x - b.pos.x);
+    else if (mode === 'ORBIT') arr.sort((a, b) => Math.atan2(a.pos.z - oc.z, a.pos.x - oc.x) - Math.atan2(b.pos.z - oc.z, b.pos.x - oc.x));
+    else if (mode === 'FORMATION') arr.sort((a, b) => a.pos.distanceToSquared(this.leader) - b.pos.distanceToSquared(this.leader));
+    arr.forEach((d, k) => d.slot = k);
+    this.lastAssign = T; this.lastActiveCount = active.length;
+  }
+  computeGoals(active) {
+    if (this.hostile) return this.intrudeGoals(active);
+    const n = active.length || 1, ph = this.ph, leader = this.leader, lv = this.leaderVel, oc = this.orbitCenter;
+    // formation leader path (Lissajous; BRAVO runs out of phase so the two swarms do not overlap)
+    const lx = (AREA - 70) * Math.sin(T * 0.05 + ph), lz = (AREA - 100) * Math.sin(T * 0.08 + ph * 1.3);
+    lv.set(lx - leader.x, 0, lz - leader.z); leader.set(lx, this.key === 'A' ? 72 : 84, lz);
+    if (lv.lengthSq() < 1e-8) lv.set(1, 0, 0);
+    lv.normalize();
+    this.sweepZ = (AREA - 40) * Math.sin(T * 0.12 + ph);
+    const cols = 8;
+    for (const d of active) {
+      const k = d.slot;
+      switch (this.mode) {
+        case 'PATROL': {
+          const w = this.waypoints[this.wpIdx];
+          d.goal.set(w.x + Math.sin(d.phase) * 12, w.y + Math.cos(d.phase * 2) * 6, w.z + Math.cos(d.phase) * 12);
+          break;
+        }
+        case 'ORBIT': {
+          const ring = k % 3, R = this.orbitR0 + ring * 14, alt = this.orbitAlt0 + ring * 12;
+          const a = T * (0.32 - ring * 0.07) * (ring === 1 ? -1 : 1) + (k / n) * Math.PI * 2;
+          d.goal.set(oc.x + Math.cos(a) * R, alt + Math.sin(T + k) * 2, oc.z + Math.sin(a) * R);
+          break;
+        }
+        case 'FORMATION': {
+          const col = k % cols, row = Math.floor(k / cols), c = col - (cols - 1) / 2;
+          const back = row * 7 + Math.abs(c) * 4;
+          // right vector = (-fz, 0, fx) with forward (fx, 0, fz)
+          d.goal.set(leader.x + -lv.z * c * 8 - lv.x * back, leader.y + row * 1.5, leader.z + lv.x * c * 8 - lv.z * back);
+          break;
+        }
+        case 'SCAN': {
+          d.goal.set(-AREA + 20 + k * ((2 * AREA - 40) / Math.max(1, n - 1)), (this.key === 'A' ? 58 : 76) + (k % 2) * 9, this.sweepZ);
+          break;
+        }
+      }
+      // never aim inside a building: lift the goal above whatever stands there
+      if (this.mode !== 'ORBIT') d.goal.y = safeAlt(d.goal.x, d.goal.z, d.goal.y);
+    }
+  }
+  // hostile: three loose groups, each heading for a landmark (NFZ included) or ALPHA's base, circling it, then moving on
+  intrudeGoals(active) {
+    if (T > this.objT) {
+      const tg = [...landmarks, { x: SA.base.x, z: SA.base.z, r: 24, name: 'ALPHA base' }];
+      this.objectives = [0, 1, 2].map(() => pick(tg)); this.objT = T + rand(30, 50);
+    }
+    for (const d of active) {
+      const o = this.objectives[d.i % 3], a = T * 0.3 + d.phase * 2, R = (o.r || 20) * 0.5 + 12;
+      d.goal.set(o.x + Math.cos(a) * R, 0, o.z + Math.sin(a) * R);
+      d.goal.y = safeAlt(d.goal.x, d.goal.z, 30 + (d.i % 4) * 7);
+    }
+  }
+  // per-swarm simulation step (before the drones move)
+  step(dt) {
+    this.modeTimer += dt;
+    if (!this.hostile && auto && this.modeTimer > 50 && T - lastInteraction > 20) {
+      let next = MODES[(MODES.indexOf(this.mode) + 1) % MODES.length];
+      const other = this === SA ? SB : SA;            // independent missions: avoid flying the other swarm's mode
+      if (other && !other.hostile && next === other.mode) next = MODES[(MODES.indexOf(next) + 1) % MODES.length];
+      this.setMode(next, 'auto-tasking');
+    }
+    const active = this.active = this.drones.filter(d => d.state === 'ACTIVE');
+    const tasked = active.filter(d => !d.target);   // interceptors are steered by intercept()
+    if (T - this.lastAssign > 2 || tasked.length !== this.lastActiveCount) this.assignSlots(tasked);
+    this.computeGoals(tasked);
+    if (!this.hostile && this.mode === 'PATROL' && tasked.length) {
+      _p.set(0, 0, 0); tasked.forEach(d => _p.add(d.pos)); _p.divideScalar(tasked.length);
+      const w = this.waypoints[this.wpIdx], who = SB ? this.name + ' ' : '';
+      if (_p.distanceTo(w) < 30) {
+        log('ok', `NAV: ${who}WP-${this.wpIdx + 1} reached · ${tasked.length} units in formation`);
+        ripple(w, this.style.route);
+        if (++this.wpIdx >= this.waypoints.length) {
+          this.genRoute();
+          log('info', `PLANNER: ${who}new patrol route generated · ${this.waypoints.length} WPs · ${(this.waypoints.reduce((s, w, i) => s + w.distanceTo(this.waypoints[(i + 1) % this.waypoints.length]), 0) * M_PER_U / 1000).toFixed(2)} km`);
+        }
+      }
+    }
+    return active;
+  }
+  visuals() {
+    const m = this.modeLabel, on = this.drones.length > 0;
+    this.routeGroup.visible = on && m === 'PATROL';
+    this.routeMats.forEach((mt, i) => { if (i) mt.opacity = i - 1 === this.wpIdx ? 0.6 + Math.sin(T * 6) * 0.3 : 0.25; });
+    this.orbitMarker.visible = on && m === 'ORBIT';
+    this.orbitMarker.position.set(this.orbitCenter.x, 0.3, this.orbitCenter.z);
+    this.orbitMarker.rotation.y = T * 0.6 * (this.key === 'A' ? 1 : -1);
+    this.orbitMarker.scale.set(this.orbitR0 / 36, 1, this.orbitR0 / 36);
+    this.leaderMarker.visible = on && m === 'FORMATION';
+    this.leaderMarker.position.copy(this.leader); this.leaderMarker.rotation.y = T * 2;
+    this.scanBand.visible = this.scanWall.visible = on && m === 'SCAN';
+    this.scanBand.position.z = this.sweepZ;
+    this.scanWall.position.set(0, this.key === 'A' ? 35 : 45, this.sweepZ);
+  }
 }
 
-function assignSlots(active) {
-  let arr = active.slice();
-  if (mode === 'SCAN') arr.sort((a, b) => a.pos.x - b.pos.x);
-  else if (mode === 'ORBIT') arr.sort((a, b) => Math.atan2(a.pos.z - orbitCenter.z, a.pos.x - orbitCenter.x) - Math.atan2(b.pos.z - orbitCenter.z, b.pos.x - orbitCenter.x));
-  else if (mode === 'FORMATION') arr.sort((a, b) => a.pos.distanceToSquared(leader) - b.pos.distanceToSquared(leader));
-  arr.forEach((d, k) => d.slot = k);
-  lastAssign = T; lastActiveCount = active.length;
+let SB = null, drones = [];
+const SA = new Swarm('A', 'ALPHA', 'UAV', V3(0, 0, 0));
+let SEL = SA;                                       // swarm that keys / clicks / mode= / orbit= act on
+function refreshDrones() { drones = SB ? SA.drones.concat(SB.drones) : SA.drones.slice(); }
+SA.setCount(N);
+const friendlyActive = () => SB && !SB.hostile ? SA.active.concat(SB.active) : SA.active;
+function updateModeLabels() {
+  const two = !!SB;
+  $('#mode').textContent = (two ? (SEL === SA ? '▸A ' : 'A ') : '') + SA.mode;
+  $('#mode2').innerHTML = two ? ` · ${SEL === SB ? '▸' : ''}B <b style="color:${SB.style.dot}">${SB.modeLabel}</b>` : '';
 }
-
-function computeGoals(active, dt) {
-  const n = active.length || 1;
-  // formation leader path
-  const lx = (AREA - 70) * Math.sin(T * 0.05), lz = (AREA - 100) * Math.sin(T * 0.08);
-  leaderVel.set(lx - leader.x, 0, lz - leader.z); leader.set(lx, 72, lz);
-  if (leaderVel.lengthSq() < 1e-8) leaderVel.set(1, 0, 0);
-  leaderVel.normalize();
-  sweepZ = (AREA - 40) * Math.sin(T * 0.12);
-  const cols = 8;
-  for (const d of active) {
-    const k = d.slot;
-    switch (mode) {
-      case 'PATROL': {
-        const w = waypoints[wpIdx];
-        d.goal.set(w.x + Math.sin(d.phase) * 12, w.y + Math.cos(d.phase * 2) * 6, w.z + Math.cos(d.phase) * 12);
-        break;
-      }
-      case 'ORBIT': {
-        const ring = k % 3, R = orbitR0 + ring * 14, alt = orbitAlt0 + ring * 12;
-        const a = T * (0.32 - ring * 0.07) * (ring === 1 ? -1 : 1) + (k / n) * Math.PI * 2;
-        d.goal.set(orbitCenter.x + Math.cos(a) * R, alt + Math.sin(T + k) * 2, orbitCenter.z + Math.sin(a) * R);
-        break;
-      }
-      case 'FORMATION': {
-        const col = k % cols, row = Math.floor(k / cols), c = col - (cols - 1) / 2;
-        const back = row * 7 + Math.abs(c) * 4;
-        // right vector = (-fz, 0, fx) with forward (fx, 0, fz)
-        d.goal.set(leader.x + -leaderVel.z * c * 8 - leaderVel.x * back,
-                   leader.y + row * 1.5,
-                   leader.z + leaderVel.x * c * 8 - leaderVel.z * back);
-        break;
-      }
-      case 'SCAN': {
-        d.goal.set(-AREA + 20 + k * ((2 * AREA - 40) / Math.max(1, n - 1)), 58 + (k % 2) * 9, sweepZ);
-        break;
-      }
-    }
-    // never aim inside a building: lift the goal above whatever stands there
-    if (mode !== 'ORBIT') d.goal.y = safeAlt(d.goal.x, d.goal.z, d.goal.y);
+function selectSwarm(s, quiet) {
+  if (s === SB && (!SB || SB.hostile)) { if (!quiet) log('err', SB ? 'BRAVO is hostile · not under our command' : 'no second swarm · use swarm2=N'); return; }
+  SEL = s; updateModeLabels(); syncCtrl();
+  if (!quiet) log('sys', `OPERATOR: commands → ${SEL.name} (${SEL.mode})`);
+}
+// swarm2=N: bring BRAVO online with N drones (0 = recall and remove it)
+function setSwarm2(n, quiet) {
+  n = clamp(Math.round(n), 0, 80);
+  if (!n) {
+    if (!SB) { log('info', 'BRAVO: offline · usage swarm2=N (1-80)'); return; }
+    SA.drones.forEach(d => { d.target = null; d.hit = 0; });
+    if (focus && focus.sw === SB) setFocus(SA.drones[0]);
+    SB.dispose(); SB = null; SEL = SA; N2 = 0;
+    refreshDrones(); buildFleet(); updateModeLabels(); syncCtrl(); updateUrl();
+    log('warn', 'BRAVO: fleet recalled · second swarm offline');
+    return;
   }
+  const fresh = !SB;
+  if (fresh) {
+    SB = new Swarm('B', 'BRAVO', 'BRV', BASE_B.clone());
+    SB.genRoute(); SB.mode = SA.mode === 'SCAN' ? 'ORBIT' : 'SCAN';
+    if (SB.mode === 'ORBIT') SB.orbitLandmark(pick(orbitTargets));
+  }
+  SB.setCount(n, fresh ? 0.5 : 0.3); N2 = n;
+  buildFleet(); updateModeLabels(); syncCtrl(); updateUrl();
+  if (!quiet) {
+    const [la, lo] = sceneToGeo(SB.base.x, SB.base.z);
+    log('ok', fresh ? `BRAVO: second swarm online · ${n} airframes · base ${la.toFixed(5)}, ${lo.toFixed(5)} (Oceanogràfic) · mission ${SB.mode}`
+                    : `BRAVO: swarm size ${n} airframes`);
+  }
+}
+// role=hostile|friendly: BRAVO as intruders (ALPHA intercepts) or as a second friendly fleet
+function setRole(r, quiet) {
+  if (!SB) { log('err', 'no second swarm · use swarm2=N first'); return; }
+  const h = r === 'hostile';
+  if (h === SB.hostile) { if (!quiet) log('info', `BRAVO role: ${h ? 'hostile' : 'friendly'}`); return; }
+  SB.hostile = h; SB.objT = -99; SB.threatT = -99;
+  SB.restyle();
+  SA.drones.forEach(d => { d.target = null; d.hit = 0; });
+  if (h && SEL === SB) SEL = SA;
+  if (!h) SB.lastAssign = -99;
+  buildFleet(); updateModeLabels(); syncCtrl(); updateUrl();
+  if (!quiet) h ? log('err', `THREAT: BRAVO squawk lost · ${SB.drones.length} contacts reclassified HOSTILE (TRK) · ALPHA cleared to intercept`)
+                : log('ok', 'BRAVO: IFF restored · contacts reclassified FRIENDLY · intercepts cancelled');
+}
+// ALPHA vs hostile BRAVO: pair each airborne track with the nearest free ALPHA drone (≤ 40 % of ALPHA); staying
+// within 20 m of it for 3 s forces the intruder down (RTB to its own base, where it recharges and comes back)
+function intercept(dt) {
+  if (!SB || !SB.hostile) return;
+  const tracks = SB.drones.filter(h => h.state === 'ACTIVE');
+  for (const d of SA.drones) if (d.target && (d.target.state !== 'ACTIVE' || d.state !== 'ACTIVE')) { d.target = null; d.hit = 0; }
+  if (tracks.length && T - SB.threatT > 25) {
+    SB.threatT = T;
+    const c = tracks.reduce((p, h) => p.add(h.pos), V3()).divideScalar(tracks.length);
+    const brg = Math.round((Math.atan2(c.x, -c.z) * 180 / Math.PI + 360) % 360);
+    log('err', `THREAT: ${tracks.length} hostile UAS airborne · bearing ${brg}° · range ${(Math.hypot(c.x, c.z) * M_PER_U).toFixed(0)}m from base`);
+  }
+  const max = Math.ceil(SA.active.length * 0.4);
+  let used = SA.drones.filter(d => d.target).length;
+  for (const h of tracks) {
+    if (used >= max) break;
+    if (SA.drones.some(d => d.target === h)) continue;
+    let best = null, bd = 1e12;
+    for (const d of SA.active) if (!d.target && d.battery > 30) { const dd = d.pos.distanceToSquared(h.pos); if (dd < bd) { bd = dd; best = d; } }
+    if (!best) break;
+    best.target = h; best.hit = 0; used++;
+    log('warn', `INTERCEPT: ${best.id} vectored to ${h.id} · range ${(Math.sqrt(bd) * M_PER_U).toFixed(0)}m`);
+  }
+  for (const d of SA.drones) if (d.target) {
+    const h = d.target, v = h.vel.lengthSq() > 0.01 ? _g.copy(h.vel).normalize() : _g.set(0, 0, 0);
+    d.goal.set(h.pos.x - v.x * 6, h.pos.y + 3, h.pos.z - v.z * 6);   // sit just behind and above the intruder
+    if (d.pos.distanceTo(h.pos) < 10) {
+      d.hit += dt;
+      if (d.hit > 3) {
+        log('ok', `NEUTRALIZED: ${h.id} escorted down by ${d.id} · forced RTB to hostile base`);
+        ripple(h.pos, 0xff3344);
+        h.battery = Math.min(h.battery, 6); h.setState('RTB');
+        d.target = null; d.hit = 0;
+      }
+    } else d.hit = Math.max(0, d.hit - dt * 0.5);
+  }
+}
+// red lines interceptor → track
+const icptLines = new THREE.LineSegments(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(160 * 6), 3)),
+  new THREE.LineDashedMaterial({ color: 0xff3344, dashSize: 2, gapSize: 2, transparent: true, opacity: 0.8 }));
+icptLines.frustumCulled = false; scene.add(icptLines);
+function drawIntercepts() {
+  const a = icptLines.geometry.attributes.position; let n = 0;
+  if (SB && SB.hostile) for (const d of SA.drones) if (d.target && n < 160) { a.setXYZ(n * 2, d.pos.x, d.pos.y, d.pos.z); a.setXYZ(n * 2 + 1, d.target.pos.x, d.target.pos.y, d.target.pos.z); n++; }
+  icptLines.geometry.setDrawRange(0, n * 2); a.needsUpdate = true;
+  if (n) icptLines.computeLineDistances();
 }
 
 // coverage grid
@@ -1055,29 +1297,56 @@ let focus = drones[0], focusTimer = 0;
 function setFocus(d) { focus = d; focusTimer = 0; }
 
 // ================= LOG =================
-const logEl = $('#log');
-function log(lv, msg) {
+// Dos paneles: SYSTEM LOG (eventos + chatter de la flota, filtrable, se pausa al pasar el ratón)
+// y C2 CONSOLE (entrada de comandos y sus respuestas). Durante runCmd() log() escribe en la consola;
+// los eventos con efecto (ok/sys/warn) se copian también al SYSTEM LOG.
+const logEl = $('#log'), conEl = $('#con'), pauseEl = $('#lPause');
+let toConsole = false, chatLine = false, logPaused = false;
+function mkLine(lv, msg, cls) {
   const line = document.createElement('div');
-  line.className = 'ln ' + lv;
+  line.className = 'ln ' + lv + (cls ? ' ' + cls : '');
   const ts = new Date().toISOString().slice(11, 23);
-  line.innerHTML = `<span class="ts">${ts}</span><span class="lv">${lv === 'cmd' ? '$' : lv.toUpperCase()}</span><span class="msg">${msg.replace(/(UAV-\d+)/g, '<b>$1</b>')}</span>`;
-  const cur = logEl.querySelector('.cursor-line');
-  logEl.insertBefore(line, cur);
-  while (logEl.children.length > 60) logEl.firstChild.remove();
+  line.innerHTML = `<span class="ts">${ts}</span><span class="lv">${lv === 'cmd' ? '$' : lv.toUpperCase()}</span><span class="msg">${msg.replace(/((?:UAV|BRV|TRK)-\d+)/g, '<b>$1</b>')}</span>`;
+  return line;
 }
-{
-  const c = document.createElement('div'); c.className = 'ln cursor-line';
-  c.innerHTML = '<span class="ts prompt" id="prompt"></span><input id="cmd" autocomplete="off" spellcheck="false" placeholder="escribe help · p.ej. drones=40">';
-  logEl.appendChild(c);
+function pushLine(el, line, max) {
+  el.appendChild(line);
+  while (el.children.length > max) el.firstChild.remove();
 }
-new ResizeObserver(() => { logEl.scrollTop = logEl.scrollHeight; }).observe(logEl);
-setInterval(() => { logEl.scrollTop = logEl.scrollHeight; }, 200);
+function log(lv, msg) {
+  if (toConsole) {
+    pushLine(conEl, mkLine(lv, msg), 150); conEl.scrollTop = conEl.scrollHeight;
+    if (!['ok', 'sys', 'warn'].includes(lv)) return;
+  }
+  pushLine(logEl, mkLine(lv, msg, chatLine ? 'chat' : toConsole ? 'op' : ''), 250);
+  if (!logPaused) logEl.scrollTop = logEl.scrollHeight;
+}
+function setLogPaused(v) {
+  logPaused = v; pauseEl.classList.toggle('paused', v); pauseEl.textContent = v ? '❚❚ PAUSED' : '● LIVE';
+  if (!v) logEl.scrollTop = logEl.scrollHeight;
+}
+logEl.addEventListener('mouseenter', () => setLogPaused(true));
+logEl.addEventListener('mouseleave', () => setLogPaused(false));
+pauseEl.addEventListener('click', () => setLogPaused(!logPaused));
+document.querySelectorAll('#pLog .lf [data-f]').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('#pLog .lf [data-f]').forEach(o => o.classList.toggle('on', o === b));
+  logEl.classList.remove('f-evt', 'f-warn');
+  if (b.dataset.f !== 'all') logEl.classList.add('f-' + b.dataset.f);
+  logEl.scrollTop = logEl.scrollHeight;
+}));
+// clic en un id de drone del log → foco (FOCUS UNIT + FPV)
+logEl.addEventListener('click', e => {
+  if (e.target.tagName !== 'B') return;
+  const d = drones.find(o => o.id === e.target.textContent);
+  if (d) setFocus(d); else log('info', `${e.target.textContent} no longer in service`);
+});
+new ResizeObserver(() => { if (!logPaused) logEl.scrollTop = logEl.scrollHeight; conEl.scrollTop = conEl.scrollHeight; }).observe(logEl);
 
 let kf = 1200, epoch = 88410;
 const OBJ = ['vehicle', 'person', 'structure', 'thermal_anomaly', 'antenna', 'solar_array', 'road_crack', 'vessel'];
 function chatter() {
-  const act = drones.filter(d => d.state === 'ACTIVE'); if (!act.length) return;
-  const d = pick(act), d2 = pick(act), W = MODE_W[mode];
+  const act = drones.filter(d => d.state === 'ACTIVE' && !d.sw.hostile); if (!act.length) return;
+  const d = pick(act), d2 = pick(act.filter(o => o.sw === d.sw)), W = MODE_W[d.sw.mode];
   const gen = [
     () => ['info', `${d.id} telemetry · alt ${(d.pos.y * M_PER_U).toFixed(1)}m · v ${(d.vel.length() * M_PER_U).toFixed(1)}m/s · hdg ${hdgOf(d)}°`],
     () => { const l = nearestLandmark(d); return ['ok', `SURVEY: ${d.id} imaging ${l.name} · ${200 + (Math.random() * 900 | 0)} frames · GSD ${(d.pos.y * M_PER_U / 40).toFixed(1)}cm/px`]; },
@@ -1097,7 +1366,7 @@ function chatter() {
   ];
   let g = pick(gen)();
   if (g[0] === 'warn' && Math.random() < 0.6) g = gen[0]();
-  log(g[0], g[1]);
+  chatLine = true; log(g[0], g[1]); chatLine = false;
 }
 const boot = [
   ['sys', `C2 kernel v4.2.1 booting · project ${PROJECT}`],
@@ -1116,7 +1385,7 @@ boot.forEach((b, i) => setTimeout(() => log(b[0], b[1]), 150 + i * 280));
 // ================= INPUT =================
 const raycaster = new THREE.Raycaster(), mouse = new THREE.Vector2();
 const groundPlane = new THREE.Plane(V3(0, 1, 0), 0);
-let downPos = null, lastInteraction = -99;
+let downPos = null;
 function groundHit(e) {
   mouse.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   raycaster.setFromCamera(mouse, cam);
@@ -1135,17 +1404,19 @@ renderer.domElement.addEventListener('pointerup', e => {
   if (!downPos || Math.hypot(e.clientX - downPos[0], e.clientY - downPos[1]) > 5) return;
   const p = groundHit(e); if (!p || Math.abs(p.x) > AREA || Math.abs(p.z) > AREA) return;
   outOfNfz(p);
-  ripple(p, 0xffcc33);
-  if (mode === 'PATROL') {
-    waypoints.splice(wpIdx, 0, V3(p.x, safeAlt(p.x, p.z, rand(32, 48)), p.z));
-    if (waypoints.length > 8) waypoints.splice((wpIdx + 1) % waypoints.length, 1);
-    wpIdx = waypoints.findIndex(w => w.x === p.x && w.z === p.z);
-    rebuildRoute();
-    log('sys', `OPERATOR: priority waypoint WP-${wpIdx + 1} @ E${(p.x * M_PER_U).toFixed(0)} N${(-p.z * M_PER_U).toFixed(0)} · swarm rerouting`);
+  const S = SEL, who = SB ? S.name + ' ' : '';
+  ripple(p, S.style.route);
+  if (S.mode === 'PATROL') {
+    const wp = S.waypoints;
+    wp.splice(S.wpIdx, 0, V3(p.x, safeAlt(p.x, p.z, rand(32, 48)), p.z));
+    if (wp.length > 8) wp.splice((S.wpIdx + 1) % wp.length, 1);
+    S.wpIdx = wp.findIndex(w => w.x === p.x && w.z === p.z);
+    S.rebuildRoute();
+    log('sys', `OPERATOR: ${who}priority waypoint WP-${S.wpIdx + 1} @ E${(p.x * M_PER_U).toFixed(0)} N${(-p.z * M_PER_U).toFixed(0)} · swarm rerouting`);
   } else {
-    const lm = orbitPoint(p); orbitFromClick = true;
-    if (mode === 'ORBIT') { log('sys', `OPERATOR: orbit target moved → ${lm || `E${(p.x * M_PER_U).toFixed(0)} N${(-p.z * M_PER_U).toFixed(0)}`}`); orbitFromClick = false; modeTimer = 0; }
-    else setMode('ORBIT', `operator designated target${lm ? ' ' + lm : ''}`);
+    const lm = S.orbitPoint(p); S.orbitFromClick = true;
+    if (S.mode === 'ORBIT') { log('sys', `OPERATOR: ${who}orbit target moved → ${lm || `E${(p.x * M_PER_U).toFixed(0)} N${(-p.z * M_PER_U).toFixed(0)}`}`); S.orbitFromClick = false; S.modeTimer = 0; S.lastAssign = -99; }
+    else S.setMode('ORBIT', `operator designated target${lm ? ' ' + lm : ''}`);
   }
 });
 let camMode = 'ORBIT';
@@ -1177,30 +1448,33 @@ function setView(v, quiet) {
 }
 // cámara fija: sin auto-rotación ni seguimiento del enjambre (se pueden ajustar por separado)
 function setCamAuto(rotate, follow, quiet) {
-  ROTATE = rotate; FOLLOW = follow; controls.autoRotate = ROTATE;
+  ROTATE = rotate; FOLLOW = follow; controls.autoRotate = ROTATE && !SWEEP; sweepOn = false;
   updateUrl(); syncCtrl();
   if (!quiet) log('sys', `CAMERA: auto-rotate ${ROTATE ? 'ON' : 'OFF'} · follow swarm ${FOLLOW ? 'ON' : 'OFF'}${!ROTATE && !FOLLOW ? ' · view locked' : ''}`);
 }
 const toggleStill = () => (ROTATE || FOLLOW) ? setCamAuto(false, false) : setCamAuto(true, true);
 // Botones en pantalla (táctil / móvil)
 function syncCtrl() {
-  document.querySelectorAll('#ctrl [data-mode]').forEach(b => b.classList.toggle('on', b.dataset.mode === mode));
+  document.querySelectorAll('#ctrl [data-mode]').forEach(b => b.classList.toggle('on', b.dataset.mode === SEL.mode));
+  const bs = $('#bSw'); bs.hidden = !SB; bs.textContent = SEL.key; bs.style.color = SEL === SB ? '#ffa040' : ''; bs.style.borderColor = SEL === SB ? '#ffa040' : '';
   $('#bCam').classList.toggle('on', camMode === 'FOLLOW');
   $('#b2d').classList.toggle('on', VIEW === '2D');
   $('#bStill').classList.toggle('on', !ROTATE && !FOLLOW);
   $('#bHud').classList.toggle('on', !document.body.classList.contains('min'));
 }
-document.querySelectorAll('#ctrl [data-mode]').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode, 'operator command')));
+document.querySelectorAll('#ctrl [data-mode]').forEach(b => b.addEventListener('click', () => SEL.setMode(b.dataset.mode, 'operator command')));
+$('#bSw').addEventListener('click', () => selectSwarm(SEL === SA ? SB : SA));
 $('#bCam').addEventListener('click', toggleCam);
 $('#b2d').addEventListener('click', () => setView(VIEW === '2D' ? '3D' : '2D'));
 $('#bStill').addEventListener('click', toggleStill);
 $('#bHud').addEventListener('click', () => { document.body.classList.toggle('min'); syncCtrl(); frameCamera(); });
-function setAuto(v) { auto = v; $('#auto').classList.toggle('off', !auto); log('sys', `AUTO-TASKING ${auto ? 'ENABLED' : 'DISABLED'}`); modeTimer = 0; }
+function setAuto(v) { auto = v; $('#auto').classList.toggle('off', !auto); log('sys', `AUTO-TASKING ${auto ? 'ENABLED' : 'DISABLED'}`); SA.modeTimer = 0; if (SB) SB.modeTimer = -25; }
 addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT') return;
   const k = e.key.toLowerCase();
   if (k === 'enter' || k === '/') { e.preventDefault(); cmdEl.focus(); }
-  else if (k >= '1' && k <= '4') { setMode(MODES[+k - 1], 'operator command'); }
+  else if (k >= '1' && k <= '4') { SEL.setMode(MODES[+k - 1], 'operator command'); }
+  else if (k === 'tab') { e.preventDefault(); if (SB) selectSwarm(SEL === SA ? SB : SA); }
   else if (k === 'a') setAuto(!auto);
   else if (k === 'h') document.body.classList.toggle('nohud');
   else if (k === 'f') { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(); }
@@ -1218,7 +1492,8 @@ function buildFleet() {
   cells = drones.map(d => {
     const c = document.createElement('div');
     c.className = 'cell';
-    c.innerHTML = `<span>${d.id.slice(4)}</span><span class="bar"><i></i></span><span class="st"></span>`;
+    const tag = d.sw === SA ? '' : d.sw.hostile ? 'T' : 'B';
+    c.innerHTML = `<span${tag ? ` style="color:${d.sw.style.dot}"` : ''}>${tag}${d.id.slice(4)}</span><span class="bar"><i></i></span><span class="st"></span>`;
     c.onclick = () => { setFocus(d); log('sys', `OPERATOR: focus → ${d.id}`); };
     fleetEl.appendChild(c);
     return { c, bar: c.querySelector('i'), st: c.querySelector('.st') };
@@ -1232,13 +1507,46 @@ let histI = 0;
 const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const updatePrompt = () => { promptEl.textContent = `c2@${PROJECT.toLowerCase().replace(/\s+/g, '-')}:~$`; };
 updatePrompt();
-$('#term').addEventListener('click', () => cmdEl.focus());
+toConsole = true; log('info', "C2 console ready · type 'help' · [Tab] completes commands"); toConsole = false;
+$('#pCon').addEventListener('click', e => { if (!getSelection().toString() && !e.target.closest('#chips')) cmdEl.focus(); });
+// autocompletado: nombres de comando y, tras '=', sus argumentos
+const ON_OFF = ['on', 'off'];
+const CMD_ARGS = {
+  help: [], status: [], clear: ['log', 'all'], drones: ['20', '40', '60', '100', '150'],
+  mode: ['patrol', 'orbit', 'formation', 'scan'], orbit: () => orbitTargets.map(l => l.code.toLowerCase()),
+  quality: ['low', 'high'], name: [], auto: ON_OFF, view: ['2d', '3d'], still: ON_OFF, rotate: ON_OFF, follow: ON_OFF,
+  swarm2: ['off', '20', '40'], role: ['friendly', 'hostile'], sel: ['a', 'b'], sweep: ['0', '45', '90'],
+};
+const argsOf = k => { const a = CMD_ARGS[k]; return typeof a === 'function' ? a() : a || []; };
+function complete() {
+  const v = cmdEl.value.replace(/^\s+/, ''), m = v.match(/^([a-zA-Z0-9]*)(?:([=\s]\s*)(.*))?$/);
+  if (!m) return;
+  const [, c, sep, a] = m;
+  let opts, pre;
+  if (sep === undefined) { opts = Object.keys(CMD_ARGS).filter(k => k.startsWith(c.toLowerCase())); pre = ''; }
+  else { opts = argsOf(c.toLowerCase()).filter(o => o.startsWith(a.toLowerCase())); pre = c + '='; }
+  if (!opts.length) return;
+  if (opts.length === 1) { cmdEl.value = pre + opts[0] + (sep === undefined && argsOf(opts[0]).length ? '=' : ''); return; }
+  let common = opts[0];
+  for (const o of opts) while (!o.startsWith(common)) common = common.slice(0, -1);
+  if (common.length > (sep === undefined ? c : a).length) cmdEl.value = pre + common;
+  else { toConsole = true; log('info', opts.join('  ')); toConsole = false; }
+}
+// chips de comandos rápidos (útiles en táctil): terminan en '=' → rellenan la entrada; si no, se ejecutan
+const CHIPS = ['help', 'status', 'mode=', 'orbit=', 'drones=', 'swarm2=', 'role=hostile', 'view=2d', 'clear'];
+$('#chips').innerHTML = CHIPS.map(c => `<span class="chip">${c}</span>`).join('');
+$('#chips').addEventListener('click', e => {
+  const c = e.target.closest('.chip'); if (!c) return;
+  const t = c.textContent;
+  if (t.endsWith('=')) { cmdEl.value = t; cmdEl.focus(); complete(); }
+  else { hist.push(t); histI = hist.length; runCmd(t); }
+});
 cmdEl.addEventListener('keydown', e => {
   e.stopPropagation();
   if (e.key === 'Enter') {
     const v = cmdEl.value.trim(); cmdEl.value = '';
     if (v) { hist.push(v); histI = hist.length; runCmd(v); }
-  } else if (e.key === 'ArrowUp') { if (histI > 0) cmdEl.value = hist[--histI]; e.preventDefault(); }
+  } else if (e.key === 'Tab') { e.preventDefault(); complete(); } else if (e.key === 'ArrowUp') { if (histI > 0) cmdEl.value = hist[--histI]; e.preventDefault(); }
   else if (e.key === 'ArrowDown') { histI = Math.min(hist.length, histI + 1); cmdEl.value = hist[histI] || ''; e.preventDefault(); }
   else if (e.key === 'Escape') cmdEl.blur();
 });
@@ -1250,6 +1558,9 @@ function updateUrl() {
     u.searchParams.set('name', PROJECT);
     if (QUALITY === 'low') u.searchParams.set('quality', 'low'); else u.searchParams.delete('quality');
     if (VIEW === '2D') u.searchParams.set('view', '2d'); else u.searchParams.delete('view');
+    if (SB) u.searchParams.set('swarm2', SB.drones.length); else u.searchParams.delete('swarm2');
+    if (SB && SB.hostile) u.searchParams.set('role2', 'hostile'); else u.searchParams.delete('role2');
+    if (SWEEP !== 45) u.searchParams.set('sweep', SWEEP); else u.searchParams.delete('sweep');
     u.searchParams.delete('still');
     if (!ROTATE) u.searchParams.set('rotate', '0'); else u.searchParams.delete('rotate');
     if (!FOLLOW) u.searchParams.set('follow', '0'); else u.searchParams.delete('follow');
@@ -1261,13 +1572,9 @@ function setDroneCount(n) {
   n = clamp(Math.round(n), 1, 150);
   const prev = N;
   if (n === prev) { log('info', `FLEET: swarm already at ${n} airframes`); return; }
-  while (drones.length > n) drones.pop().dispose();
   N = n;
-  buildPads(N);
-  drones.forEach(d => { d.pad = pads[d.i]; if (d.state === 'IDLE' || d.state === 'CHARGING') d.pos.copy(d.pad); });
-  for (let i = drones.length; i < n; i++) drones.push(new Drone(i, 0.3 + (i - prev) * 0.08));
+  SA.setCount(N, 0.3);
   if (!drones.includes(focus)) setFocus(drones[0]);
-  lastActiveCount = -1;
   buildFleet();
   updateUrl();
   if (n < prev) log('warn', `FLEET: decommissioning ${prev - n} airframes · swarm size ${n}`);
@@ -1285,8 +1592,12 @@ function setQuality(q) {
 }
 
 function runCmd(raw) {
+  toConsole = true;
+  try { execCmd(raw); } finally { toConsole = false; }
+}
+function execCmd(raw) {
   log('cmd', esc(raw));
-  const m = raw.match(/^\s*([a-zA-Z]+)\s*(?:[=\s]\s*(.+))?$/);
+  const m = raw.match(/^\s*([a-zA-Z][a-zA-Z0-9]*)\s*(?:[=\s]\s*(.+))?$/);
   if (!m) { log('err', `parse error: ${esc(raw)} · type 'help'`); return; }
   const cmd = m[1].toLowerCase(), argRaw = (m[2] || '').trim(), arg = argRaw.toLowerCase();
   switch (cmd) {
@@ -1300,8 +1611,13 @@ function runCmd(raw) {
         'auto=on|off · rotación automática de modos',
         'view=2d|3d · vista cenital 2D (norte arriba) o perspectiva 3D  [V]',
         'still=on|off · cámara fija: sin giro ni seguimiento  [R] · rotate=on|off · follow=on|off por separado',
-        'status · clear · help',
-        '[Enter] o [/] abre la terminal · [Esc] sale · [↑/↓] historial',
+        'swarm2=N|off · segundo enjambre BRAVO (1-80 drones, base junto al Oceanogràfic)',
+        'role=friendly|hostile · BRAVO aliado o intrusos (ALPHA los intercepta)',
+        'sel=a|b · enjambre que reciben mode=/orbit=/clic  [Tab]',
+        'sweep=GRADOS · barrido de la auto-rotación ±N° (0 = giro completo)',
+        'status · help · clear (consola) · clear=log · clear=all',
+        '[Enter] o [/] abre la consola · [Tab] autocompleta · [Esc] sale · [↑/↓] historial',
+        'SYSTEM LOG: ALL/EVENTS/ALERTS filtran · pasar el ratón pausa · clic en un UAV-xx lo enfoca',
       ].forEach(l => log('info', l));
       break;
     case 'drones': {
@@ -1312,7 +1628,7 @@ function runCmd(raw) {
     }
     case 'mode': {
       const md = arg.toUpperCase();
-      if (MODES.includes(md)) setMode(md, 'operator command');
+      if (MODES.includes(md)) SEL.setMode(md, 'operator command');
       else log('err', `unknown mode '${esc(argRaw)}' · options: ${MODES.join(', ').toLowerCase()}`);
       break;
     }
@@ -1324,9 +1640,9 @@ function runCmd(raw) {
       else if (!l) log('err', `unknown target '${esc(argRaw)}' · options: ${orbitTargets.map(l => l.code.toLowerCase()).join(', ')}`);
       else if (l.nfz) log('err', `DENIED: ${l.name} is inside ${obstacles[0].name} · no-fly zone`);
       else {
-        orbitLandmark(l); orbitFromClick = true; lastInteraction = T;
-        if (mode === 'ORBIT') { log('sys', `OPERATOR: orbit target moved → ${l.name}`); orbitFromClick = false; modeTimer = 0; lastAssign = -99; }
-        else setMode('ORBIT', `operator target ${l.name}`);
+        const S = SEL; S.orbitLandmark(l); S.orbitFromClick = true; lastInteraction = T;
+        if (S.mode === 'ORBIT') { log('sys', `OPERATOR: ${SB ? S.name + ' ' : ''}orbit target moved → ${l.name}`); S.orbitFromClick = false; S.modeTimer = 0; S.lastAssign = -99; }
+        else S.setMode('ORBIT', `operator target ${l.name}`);
       }
       break;
     }
@@ -1359,13 +1675,37 @@ function runCmd(raw) {
       if (arg === 'on' || arg === 'off') setAuto(arg === 'on');
       else log('info', `auto-tasking ${auto ? 'on' : 'off'} · usage auto=on|off`);
       break;
+    case 'swarm2': case 'bravo': {
+      if (arg === 'off' || arg === '0') setSwarm2(0);
+      else if (arg === 'on' || arg === '') { if (arg === '' && SB) log('info', `BRAVO: ${SB.drones.length} airframes · ${SB.hostile ? 'HOSTILE' : 'friendly'} · ${SB.modeLabel} · usage swarm2=N|off`); else setSwarm2(SB ? SB.drones.length : 20); }
+      else if (arg === 'hostile' || arg === 'friendly') { if (!SB) setSwarm2(20); setRole(arg); }
+      else { const n = parseInt(arg); if (isNaN(n)) log('err', `usage swarm2=N (1-80) | off`); else setSwarm2(n); }
+      break;
+    }
+    case 'role':
+      if (arg === 'hostile' || arg === 'friendly') setRole(arg);
+      else log('info', SB ? `BRAVO role: ${SB.hostile ? 'hostile' : 'friendly'} · usage role=friendly|hostile` : 'no second swarm · use swarm2=N');
+      break;
+    case 'sel': case 'swarm':
+      if (arg === 'a' || arg === 'alpha') selectSwarm(SA);
+      else if (arg === 'b' || arg === 'bravo') selectSwarm(SB);
+      else log('info', `commands → ${SEL.name} · usage sel=a|b`);
+      break;
+    case 'sweep': {
+      const v = parseFloat(arg);
+      if (isNaN(v)) { log('info', `CAMERA: auto-rotate ${SWEEP ? `sweep ±${SWEEP}°` : 'full 360°'} · usage sweep=0-180`); break; }
+      SWEEP = clamp(v, 0, 180); sweepOn = false; controls.autoRotate = ROTATE && !SWEEP; updateUrl();
+      log('sys', `CAMERA: auto-rotate ${SWEEP ? `sweeps ±${SWEEP}° around the current view` : 'full 360° rotation'}`);
+      break;
+    }
     case 'status': {
       const c = s => drones.filter(d => d.state === s).length;
-      log('info', `STATUS: ${N} airframes · ${c('ACTIVE')} active · ${c('RTB') + c('LANDING')} rtb · ${c('CHARGING')} charging · mode ${mode} · view ${VIEW}${!ROTATE && !FOLLOW ? ' (still)' : ''} · quality ${QUALITY} · ${$('#fps').textContent}`);
+      log('info', `STATUS: ${N}${SB ? ` + ${SB.drones.length} ${SB.hostile ? 'hostile' : 'BRAVO'}` : ''} airframes · ${c('ACTIVE')} active · ${c('RTB') + c('LANDING')} rtb · ${c('CHARGING')} charging · mode ${SA.mode}${SB ? ` / ${SB.modeLabel}` : ''} · view ${VIEW}${!ROTATE && !FOLLOW ? ' (still)' : ''} · quality ${QUALITY} · ${$('#fps').textContent}`);
       break;
     }
     case 'clear':
-      [...logEl.querySelectorAll('.ln:not(.cursor-line)')].forEach(n => n.remove());
+      if (arg === 'log' || arg === 'all') logEl.replaceChildren();
+      if (arg !== 'log') conEl.replaceChildren();
       break;
     default:
       log('err', `${esc(cmd)}: command not found · type 'help'`);
@@ -1432,38 +1772,60 @@ function drawMap() {
     ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.arc(X(o.x), Y(o.z), o.r * S, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
     ctx.fillStyle = '#ff4d5e'; ctx.font = '9px monospace'; ctx.fillText(o.name, X(o.x) - 14, Y(o.z) + 3);
   }
-  // base
-  ctx.strokeStyle = 'rgba(77,255,154,.9)'; ctx.beginPath(); ctx.arc(X(0), Y(0), BASE_R * S, 0, Math.PI * 2); ctx.stroke();
-  // radar sweep
+  // bases
+  for (const sw of SB ? [SA, SB] : [SA]) {
+    ctx.strokeStyle = sw === SA ? 'rgba(77,255,154,.9)' : `rgba(${sw.style.css},.9)`;
+    ctx.beginPath(); ctx.arc(X(sw.base.x), Y(sw.base.z), sw.baseR * S, 0, Math.PI * 2); ctx.stroke();
+    if (SB) { ctx.fillStyle = ctx.strokeStyle; ctx.font = '8px monospace'; ctx.fillText(sw.key, X(sw.base.x) - 2.5, Y(sw.base.z) + 3); }
+  }
+  // radar sweep (ALPHA base)
   const sa = T * 1.1;
   for (let i = 0; i < 24; i++) {
     const a = sa - i * 0.025;
     ctx.strokeStyle = `rgba(63,240,255,${0.3 * (1 - i / 24)})`;
     ctx.beginPath(); ctx.moveTo(X(0), Y(0)); ctx.lineTo(X(0) + Math.cos(a) * w, Y(0) + Math.sin(a) * w); ctx.stroke();
   }
-  // mode overlays
-  if (mode === 'PATROL') {
-    ctx.strokeStyle = 'rgba(255,204,51,.7)'; ctx.setLineDash([4, 4]); ctx.beginPath();
-    waypoints.forEach((p, i) => i ? ctx.lineTo(X(p.x), Y(p.z)) : ctx.moveTo(X(p.x), Y(p.z)));
-    ctx.closePath(); ctx.stroke(); ctx.setLineDash([]);
-    waypoints.forEach((p, i) => {
-      ctx.fillStyle = i === wpIdx ? '#ffcc33' : 'rgba(255,204,51,.35)';
-      ctx.beginPath(); ctx.arc(X(p.x), Y(p.z), i === wpIdx ? 4 : 3, 0, Math.PI * 2); ctx.fill();
-      ctx.font = '9px monospace'; ctx.fillText('WP' + (i + 1), X(p.x) + 5, Y(p.z) - 4);
-    });
-  } else if (mode === 'ORBIT') {
-    ctx.strokeStyle = 'rgba(255,159,51,.8)';
-    for (const R of [0, 14, 28]) { ctx.beginPath(); ctx.arc(X(orbitCenter.x), Y(orbitCenter.z), (orbitR0 + R) * S, 0, Math.PI * 2); ctx.stroke(); }
-  } else if (mode === 'SCAN') {
-    ctx.strokeStyle = 'rgba(77,255,154,.9)'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(X(-AREA + 10), Y(sweepZ)); ctx.lineTo(X(AREA - 10), Y(sweepZ)); ctx.stroke(); ctx.lineWidth = 1;
-  } else if (mode === 'FORMATION') {
-    ctx.fillStyle = '#b58cff'; ctx.beginPath(); ctx.arc(X(leader.x), Y(leader.z), 4, 0, Math.PI * 2); ctx.fill();
+  // mission overlays, one per swarm in its colour
+  for (const sw of SB ? [SA, SB] : [SA]) {
+    const c = sw.style.css, m = sw.modeLabel, pre = SB ? sw.key : '';
+    if (m === 'PATROL') {
+      ctx.strokeStyle = `rgba(${c},.7)`; ctx.setLineDash([4, 4]); ctx.beginPath();
+      sw.waypoints.forEach((p, i) => i ? ctx.lineTo(X(p.x), Y(p.z)) : ctx.moveTo(X(p.x), Y(p.z)));
+      ctx.closePath(); ctx.stroke(); ctx.setLineDash([]);
+      sw.waypoints.forEach((p, i) => {
+        ctx.fillStyle = i === sw.wpIdx ? `rgb(${c})` : `rgba(${c},.35)`;
+        ctx.beginPath(); ctx.arc(X(p.x), Y(p.z), i === sw.wpIdx ? 4 : 3, 0, Math.PI * 2); ctx.fill();
+        ctx.font = '9px monospace'; ctx.fillText(pre + 'WP' + (i + 1), X(p.x) + 5, Y(p.z) - 4);
+      });
+    } else if (m === 'ORBIT') {
+      ctx.strokeStyle = sw === SA ? 'rgba(255,159,51,.8)' : `rgba(${c},.8)`;
+      for (const R of [0, 14, 28]) { ctx.beginPath(); ctx.arc(X(sw.orbitCenter.x), Y(sw.orbitCenter.z), (sw.orbitR0 + R) * S, 0, Math.PI * 2); ctx.stroke(); }
+    } else if (m === 'SCAN') {
+      ctx.strokeStyle = sw === SA ? 'rgba(77,255,154,.9)' : `rgba(${c},.9)`; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(X(-AREA + 10), Y(sw.sweepZ)); ctx.lineTo(X(AREA - 10), Y(sw.sweepZ)); ctx.stroke(); ctx.lineWidth = 1;
+    } else if (m === 'FORMATION') {
+      ctx.fillStyle = sw === SA ? '#b58cff' : `rgb(${c})`; ctx.beginPath(); ctx.arc(X(sw.leader.x), Y(sw.leader.z), 4, 0, Math.PI * 2); ctx.fill();
+    } else if (m === 'INTRUDE') {                     // hostile objectives
+      ctx.strokeStyle = 'rgba(255,77,94,.8)'; ctx.lineWidth = 1.5;
+      for (const o of sw.objectives) { const x = X(o.x), y = Y(o.z); ctx.beginPath(); ctx.moveTo(x - 4, y - 4); ctx.lineTo(x + 4, y + 4); ctx.moveTo(x + 4, y - 4); ctx.lineTo(x - 4, y + 4); ctx.stroke(); }
+      ctx.lineWidth = 1;
+    }
   }
-  // drones
+  // intercepts
+  if (SB && SB.hostile) {
+    ctx.strokeStyle = 'rgba(255,77,94,.75)'; ctx.setLineDash([2, 2]); ctx.beginPath();
+    for (const d of SA.drones) if (d.target) { ctx.moveTo(X(d.pos.x), Y(d.pos.z)); ctx.lineTo(X(d.target.pos.x), Y(d.target.pos.z)); }
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+  // drones (BRAVO: diamonds · hostile tracks: red triangles)
   for (const d of drones) {
-    ctx.fillStyle = '#' + STATE_COLOR[d.state].toString(16).padStart(6, '0');
-    ctx.fillRect(X(d.pos.x) - 1.5, Y(d.pos.z) - 1.5, 3, 3);
+    const x = X(d.pos.x), y = Y(d.pos.z);
+    if (d.sw === SA) { ctx.fillStyle = '#' + STATE_COLOR[d.state].toString(16).padStart(6, '0'); ctx.fillRect(x - 1.5, y - 1.5, 3, 3); continue; }
+    ctx.fillStyle = d.state === 'ACTIVE' ? d.sw.style.dot : '#' + STATE_COLOR[d.state].toString(16).padStart(6, '0');
+    ctx.beginPath();
+    if (d.sw.hostile) { ctx.moveTo(x, y - 3); ctx.lineTo(x + 2.8, y + 2); ctx.lineTo(x - 2.8, y + 2); }
+    else { ctx.moveTo(x, y - 2.5); ctx.lineTo(x + 2.5, y); ctx.lineTo(x, y + 2.5); ctx.lineTo(x - 2.5, y); }
+    ctx.fill();
   }
   ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.arc(X(focus.pos.x), Y(focus.pos.z), 6 + Math.sin(T * 6) * 1.5, 0, Math.PI * 2); ctx.stroke();
   // camera
@@ -1539,16 +1901,17 @@ function updateHud(active) {
   $('#clock').textContent = now.toISOString().slice(11, 19);
   const el = Math.floor((Date.now() - t0) / 1000);
   $('#tplus').textContent = `${pad2(Math.floor(el / 3600))}:${pad2(Math.floor(el / 60) % 60)}:${pad2(el % 60)}`;
-  const cnt = s => drones.filter(d => d.state === s).length;
+  const own = SB && SB.hostile ? SA.drones : drones;   // hostile tracks are not part of our fleet stats
+  const cnt = s => own.filter(d => d.state === s).length;
   $('#sAct').textContent = active.length;
   $('#sRtb').textContent = cnt('RTB') + cnt('LANDING');
   $('#sChg').textContent = cnt('CHARGING') + cnt('IDLE') + cnt('LAUNCH');
-  $('#sBat').innerHTML = (drones.reduce((s, d) => s + d.battery, 0) / N).toFixed(0) + '<small>%</small>';
-  $('#sLink').innerHTML = (drones.reduce((s, d) => s + d.link, 0) / N).toFixed(1) + '<small>%</small>';
+  $('#sBat').innerHTML = (own.reduce((s, d) => s + d.battery, 0) / own.length).toFixed(0) + '<small>%</small>';
+  $('#sLink').innerHTML = (own.reduce((s, d) => s + d.link, 0) / own.length).toFixed(1) + '<small>%</small>';
   $('#sCov').innerHTML = coveragePct().toFixed(1) + '<small>%</small>';
-  $('#nodes').textContent = `${N} NODES`;
+  $('#nodes').textContent = SB ? `${N}+${SB.drones.length} NODES` : `${N} NODES`;
   drones.forEach((d, i) => {
-    const c = cells[i];
+    const c = cells[i]; if (!c) return;
     c.c.className = 'cell ' + d.state + (d.battery < 20 ? ' low' : '') + (d === focus ? ' focus' : '');
     c.bar.style.width = d.battery.toFixed(0) + '%';
     c.st.textContent = STATE_SHORT[d.state];
@@ -1602,9 +1965,22 @@ function updateCamera(dt) {
         controls.target.lerp(_p, 1 - Math.exp(-dt * 0.3));
       }
     }
+    // auto-rotation as a back-and-forth sweep of ±SWEEP° around the current view (paused while the user drags)
+    if (ROTATE && SWEEP > 0 && !dragging && T - lastInteraction > 3) {
+      _sph.setFromVector3(_p.subVectors(camera.position, controls.target));
+      if (!sweepOn) { sweepHome = _sph.theta - sweepAmp() * Math.sin(sweepPh); sweepOn = true; }
+      sweepPh += dt * 0.0367 * 1.4 / Math.max(0.2, sweepAmp());   // peak speed ≈ 1.4× the old autoRotateSpeed 0.35
+      _sph.theta = sweepHome + sweepAmp() * Math.sin(sweepPh);
+      camera.position.copy(controls.target).add(_p.setFromSpherical(_sph));
+    } else sweepOn = false;
     controls.update();
   }
 }
+const _sph = new THREE.Spherical();
+let sweepOn = false, sweepHome = 0, sweepPh = 0, dragging = false;
+const sweepAmp = () => THREE.MathUtils.degToRad(SWEEP);
+controls.addEventListener('start', () => { dragging = true; });
+controls.addEventListener('end', () => { dragging = false; lastInteraction = T; });
 function renderFPV() {
   if (document.body.classList.contains('nohud')) return;
   const r = $('#fpv').getBoundingClientRect(); if (r.width < 4 || r.height < 4) return;
@@ -1627,38 +2003,21 @@ function renderFPV() {
 // ================= MAIN LOOP =================
 const clock = new THREE.Clock();
 let hudT = 0, chartT = 0, chatT = 1.5;
-genRoute();
-$('#mode').textContent = mode;
+SA.genRoute();
+updateModeLabels();
 
 // simulation step (no rendering) → also used by __swarm.warp() in headless tests
 function simStep(dt) {
   T += dt;
 
   // --- simulation ---
-  modeTimer += dt;
-  if (auto && modeTimer > 50 && T - lastInteraction > 20) setMode(MODES[(MODES.indexOf(mode) + 1) % MODES.length], 'auto-tasking');
-  const flying = [], active = [];
-  for (const d of drones) {
-    if (d.state === 'ACTIVE') { active.push(d); flying.push(d); }
-    else if (d.state === 'RTB') flying.push(d);
-  }
-  if (T - lastAssign > 2 || active.length !== lastActiveCount) assignSlots(active);
-  computeGoals(active, dt);
+  const flying = drones.filter(d => d.state === 'ACTIVE' || d.state === 'RTB');   // separation across both swarms
+  SA.step(dt);
+  if (SB) SB.step(dt);
+  intercept(dt);                                    // overrides the goals of ALPHA interceptors
   neiSum = 0; neiCnt = 0;
   for (const d of drones) d.update(dt, flying);
-
-  if (mode === 'PATROL' && active.length) {
-    _p.set(0, 0, 0); active.forEach(d => _p.add(d.pos)); _p.divideScalar(active.length);
-    if (_p.distanceTo(waypoints[wpIdx]) < 30) {
-      log('ok', `NAV: WP-${wpIdx + 1} reached · ${active.length} units in formation`);
-      ripple(waypoints[wpIdx], 0xffcc33);
-      wpIdx++;
-      if (wpIdx >= waypoints.length) {
-        genRoute();
-        log('info', `PLANNER: new patrol route generated · ${waypoints.length} WPs · ${(waypoints.reduce((s, w, i) => s + w.distanceTo(waypoints[(i + 1) % waypoints.length]), 0) * M_PER_U / 1000).toFixed(2)} km`);
-      }
-    }
-  }
+  const active = friendlyActive();
   markCoverage(active);
 
   focusTimer += dt;
@@ -1683,19 +2042,10 @@ function frame() {
   const active = simStep(dt);
 
   // --- visuals ---
-  routeGroup.visible = mode === 'PATROL';
-  routeMats.forEach((m, i) => { m.opacity = i === wpIdx ? 0.6 + Math.sin(T * 6) * 0.3 : 0.25; });
-  orbitMarker.visible = mode === 'ORBIT';
-  orbitMarker.position.set(orbitCenter.x, 0.3, orbitCenter.z);
-  orbitMarker.rotation.y = T * 0.6;
-  leaderMarker.visible = mode === 'FORMATION';
-  leaderMarker.position.copy(leader); leaderMarker.rotation.y = T * 2;
-  scanBand.visible = scanWall.visible = mode === 'SCAN';
-  scanBand.position.z = sweepZ;
-  scanWall.position.set(0, 35, sweepZ);
+  SA.visuals(); if (SB) SB.visuals();
+  drawIntercepts();
   beacons.forEach(b => b.material.opacity = Math.sin(T * 3 + b.userData.ph) > 0.6 ? 1 : 0.15);
   rtk.dish.rotation.y = T * 1.5;
-  orbitMarker.scale.set(orbitR0 / 36, 1, orbitR0 / 36);
   for (let i = ripples.length - 1; i >= 0; i--) {
     const r = ripples[i]; r.t += dt;
     r.m.scale.setScalar(1 + r.t * 25); r.m.material.opacity = Math.max(0, 1 - r.t / 1.4);
@@ -1786,10 +2136,11 @@ const canvasRO = new ResizeObserver(() => fitAll());
 fitAll();
 frameCamera();
 if (VIEW === '2D') setView('2D', true);
+if (N2) { setSwarm2(N2, true); if (ROLE2 === 'hostile') setRole('hostile', true); }
 syncCtrl();
 frame();
 // debug / tests
-window.__swarm = { drones: () => drones, landmarks, obstacles, topAt, sceneToGeo, setMode, runCmd, camera, controls, topCam, topControls, setView, setCamAuto, cacVoxels, cityMesh, cacMeshes, scene, gridGroup,
+window.__swarm = { drones: () => drones, landmarks, obstacles, topAt, sceneToGeo, get SA() { return SA; }, get SB() { return SB; }, setMode: (m, w) => SEL.setMode(m, w), setSwarm2, setRole, runCmd, camera, controls, topCam, topControls, setView, setCamAuto, cacVoxels, cityMesh, cacMeshes, scene, gridGroup,
   warp(sec) { for (let t = 0; t < sec; t += 0.05) simStep(0.05); } };
 </script>
 </body>

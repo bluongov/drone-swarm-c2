@@ -68,20 +68,24 @@ Después pulsa **`F`** para pantalla completa y déjalo corriendo.
 | `1` `2` `3` `4` | Modo `PATROL` · `ORBIT` · `FORMATION` · `SCAN` |
 | `C` | Alterna entre cámara orbital general y **cámara de persecución** del drone seleccionado |
 | `V` | Alterna entre la vista **3D** (perspectiva) y la vista **2D** cenital: cámara ortográfica desde arriba, norte arriba, misma escena y mismo HUD. El minimapa marca la zona visible |
-| `R` | **Fija la cámara**: sin auto-rotación ni seguimiento del enjambre (otra vez `R` lo reactiva). En 2D, con seguimiento activo, el mapa se desplaza solo hacia el enjambre; `C` lo centra en el drone seleccionado |
+| `R` | **Fija la cámara**: sin auto-rotación (que por defecto es un barrido de ida y vuelta de ±45° alrededor de la vista, ver `sweep`) ni seguimiento del enjambre (otra vez `R` lo reactiva). En 2D, con seguimiento activo, el mapa se desplaza solo hacia el enjambre; `C` lo centra en el drone seleccionado |
+| `Tab` | Con un segundo enjambre, alterna el enjambre seleccionado (A/B) |
 | `A` | Activa o desactiva la rotación automática de modos (cada 50 s) |
 | `H` | Oculta o muestra el HUD (queda solo la escena 3D) |
 | `F` | Pantalla completa |
 | `Enter` o `/` | Abre la terminal integrada para escribir comandos |
 | `Esc` | Sale de la terminal |
 | Clic en una celda de *Fleet Matrix* | Selecciona ese drone (cámara FPV, horizonte y telemetría) |
-| **Botones en pantalla** (táctil/móvil) | `PATROL` `ORBIT` `FORM` `SCAN` · `CAM` (persecución) · `2D` (vista cenital) · `LOCK` (cámara fija) · `HUD` (oculta paneles y deja solo escena + barra superior) |
+| **Botones en pantalla** (táctil/móvil) | `PATROL` `ORBIT` `FORM` `SCAN` · `A`/`B` (enjambre seleccionado, solo con BRAVO) · `CAM` (persecución) · `2D` (vista cenital) · `LOCK` (cámara fija) · `HUD` (oculta paneles y deja solo escena + barra superior) |
 
 ---
 
 ## 💻 Comandos de la terminal integrada
 
-El panel **SYSTEM LOG** funciona como terminal (`c2@halcyon:~$`). Pulsa `Enter`, escribe y vuelve a pulsar `Enter`. Las flechas `↑`/`↓` recorren el historial.
+La franja inferior tiene dos paneles separados:
+
+- **SYSTEM LOG**: eventos de la simulación y chatter de la flota. Filtros `ALL` / `EVENTS` (sin chatter) / `ALERTS` (solo avisos y errores). Al pasar el ratón por encima se **pausa** (`❚❚ PAUSED`) y se puede hacer scroll; al salir vuelve a `● LIVE`. Un clic en un `UAV-xx` lo pone en FOCUS UNIT y en el FPV.
+- **C2 CONSOLE** (`c2@halcyon:~$`): la terminal. Pulsa `Enter` (o `/`), escribe y vuelve a pulsar `Enter`. Las respuestas salen aquí y no se pierden entre el chatter; los cambios con efecto (misión, flota, cámara…) también se anotan en el SYSTEM LOG. `Tab` autocompleta comandos y argumentos (dos `Tab` listan opciones), `↑`/`↓` recorren el historial y los botones de debajo lanzan comandos frecuentes (útiles en táctil).
 
 | Comando | Ejemplo | Descripción |
 |---|---|---|
@@ -95,8 +99,12 @@ El panel **SYSTEM LOG** funciona como terminal (`c2@halcyon:~$`). Pulsa `Enter`,
 | `view=2d\|3d` | `view=2d` | Vista cenital 2D o perspectiva 3D (igual que `V`) |
 | `still=on\|off` | `still=on` | Cámara fija: sin giro ni seguimiento (igual que `R`) |
 | `rotate=on\|off` · `follow=on\|off` | `rotate=off` | Auto-rotación de la cámara 3D y seguimiento del enjambre, por separado |
+| `sweep=GRADOS` | `sweep=30` · `sweep=0` | Amplitud del barrido de la auto-rotación (±N°); `0` = giro completo de 360° |
+| `swarm2=N\|off` | `swarm2=30` | Segundo enjambre BRAVO (1–80 drones) o lo retira |
+| `role=friendly\|hostile` | `role=hostile` | BRAVO aliado o intrusos (ALPHA los intercepta) |
+| `sel=a\|b` | `sel=b` | Enjambre que reciben `mode=`, `orbit=`, `1-4` y el clic (igual que `Tab`) |
 | `status` | `status` | Resumen: drones activos, en RTB y cargando, modo, calidad y FPS |
-| `clear` | `clear` | Limpia el log |
+| `clear` | `clear` · `clear=log` · `clear=all` | Limpia la consola, el SYSTEM LOG o ambos |
 
 Tanto `drones=40` como `drones 40` son válidos. Cuando el navegador lo permite, los cambios de `drones`, `name` y `quality` se guardan en la URL, así que sobreviven a un F5. Con `file://` algunos navegadores lo bloquean; en ese caso usa un servidor local.
 
@@ -118,6 +126,9 @@ index.html?name=SKYNET&drones=40&quality=low
 | `view` | `3d` | `2d` arranca en la vista cenital |
 | `still` | — | `1` arranca con la cámara fija (equivale a `rotate=0&follow=0`) |
 | `rotate`, `follow` | `1` | `0` desactiva la auto-rotación o el seguimiento del enjambre |
+| `sweep` | `45` | Barrido de la auto-rotación en grados (`0` = 360°) |
+| `swarm2` | `0` | Drones del segundo enjambre BRAVO (0 = apagado) |
+| `role2` | `friendly` | `hostile` arranca BRAVO como intrusos |
 | `embed` | — | `1` desactiva el zoom con rueda (para incrustarlo en un `<iframe>` sin bloquear el scroll de la página) |
 
 ---
@@ -140,8 +151,8 @@ El HUD se reorganiza según el tamaño y la orientación de la pantalla:
 | Pantalla | Distribución |
 |---|---|
 | **Horizontal** (escritorio, portátil) | Columnas laterales (estado/flota · mapa/FPV/foco), escena en el centro y log + telemetría abajo. Las columnas se estrechan en pantallas pequeñas y los paneles se compactan en alturas ≤ 860 px. |
-| **Monitor vertical / tablet vertical** | Escena arriba a todo el ancho y paneles en una banda inferior de 3 columnas (estado/flota · mapa · FPV/foco), con log y telemetría al final. |
-| **Móvil vertical** | Barra compacta, 6 indicadores en una fila, escena con minimapa en la esquina, botones táctiles y log corto. |
+| **Monitor vertical / tablet vertical** | Escena arriba a todo el ancho y paneles en una banda inferior de 3 columnas (estado/flota · mapa/telemetría · FPV/foco), con log y consola a todo el ancho al final. |
+| **Móvil vertical** | Barra compacta, 6 indicadores en una fila, escena con minimapa en la esquina, botones táctiles, log corto y consola de una línea. |
 | **Móvil horizontal** | Escena, mapa lateral y botones táctiles. |
 
 La cámara 3D **se reencuadra sola** en la zona que queda libre: centra la proyección con `camera.setViewOffset`, ajusta el FOV al ancho disponible y, si la zona es alta y estrecha, se aleja y se vuelve más cenital. Así los paneles nunca tapan la ciudad.
@@ -158,14 +169,22 @@ La cámara 3D **se reencuadra sola** en la zona que queda libre: centra la proye
 │ FLEET MATRIX  │                                              │ FOCUS UNIT (horizonte      │
 │ (bat/estado   │                                              │ artificial + telemetría)   │
 │ por drone)    │                                              │                            │
-├───────────────┴──────────────────────────────────────────────┼────────────────────────────┤
-│ SYSTEM LOG + terminal interactiva                            │ TELEMETRY (THRPT/ALT/LAT)  │
-└──────────────────────────────────────────────────────────────┴────────────────────────────┘
+├───────────────┴─────────────────┬────────────────────────────┼────────────────────────────┤
+│ SYSTEM LOG (filtros, pausa)     │ C2 CONSOLE (comandos)      │ TELEMETRY (THRPT/ALT/LAT)  │
+└─────────────────────────────────┴────────────────────────────┴────────────────────────────┘
 ```
 
 - **Escena 3D**: los edificios de la Ciutat de les Arts i les Ciències y la ciudad de Valencia se representan con vóxeles y una retícula luminosa. Hay balizas rojas en lo alto de cada landmark y de las 14 torres urbanas más altas (≥ 60 m), dos zonas NFZ, base de carga con plataformas y drones con LEDs de estado, estroboscopio y estelas.
 - **Drone seleccionado**: anillo, cono de escaneo al suelo y etiqueta flotante. Cambia cada 10 s.
 - **Banner** “RETASKING SWARM” cada vez que cambia la misión.
+
+## 🛸 Segundo enjambre (BRAVO)
+
+Opcional y apagado por defecto: `swarm2=N` en la terminal o en la URL (1–80 drones).
+
+- **BRAVO aliado** (naranja, `BRV-xx`): base propia al noreste del Oceanogràfic (≈ 39.45458, −0.34602), misiones independientes de ALPHA (la auto-rotación de modos evita que ambos vuelen el mismo modo) y rombos naranjas en el mapa. `Tab`, el botón `A/B` o `sel=a|b` eligen a qué enjambre van `1-4`, `mode=`, `orbit=` y el clic en el suelo; la cabecera marca el seleccionado con `▸`.
+- **BRAVO hostil** (`role=hostile`, rojo, `TRK-xx`): intrusos que ignoran el geofence (el log avisa de cada `GEOFENCE BREACH`) y van en tres grupos hacia landmarks o la base ALPHA. Hasta el 40 % de ALPHA se separa para interceptarlos (líneas rojas discontinuas); un interceptor que se mantiene a menos de 20 m durante 3 s obliga al intruso a volver a su base (`NEUTRALIZED`), donde recarga y vuelve a despegar. Los intrusos no se pueden comandar y no cuentan en las estadísticas de la flota.
+- Separación entre ambos enjambres siempre activa; alineación y cohesión solo dentro de cada uno.
 
 ## 🏛️ El escenario: Ciutat de les Arts i les Ciències
 
@@ -255,12 +274,12 @@ IDLE ──(delay escalonado)──► LAUNCH ──(alt>24m)──► ACTIVE �
 - **Telemetría del drone seleccionado**:
   - ALT, SPD, HDG, BAT y LINK se calculan en la simulación y se presentan en unidades reales; RPM y temperatura del ESC son derivados.
   - LAT/LON son las coordenadas reales de la posición, desde el origen del sitio (39.45472, −0.3525) mediante proyección equirectangular. El cursor muestra E/N en metros.
-- **Log**: mensajes de arranque y eventos de la simulación (RTB, aterrizajes, waypoints, geofence, cambios de modo), además de chatter procedural sobre la flota y líneas SURVEY/LIDAR del landmark más cercano.
+- **Log**: mensajes de arranque y eventos de la simulación (RTB, aterrizajes, waypoints, geofence, cambios de modo), además de chatter procedural sobre la flota y líneas SURVEY/LIDAR del landmark más cercano. El chatter lleva la clase `chat` para que el filtro `EVENTS` lo oculte por CSS.
 - El HUD de texto se actualiza cada 250 ms. El mapa y el horizonte se dibujan en cada frame.
 - El layout se adapta a la altura de la pantalla: el mapa y el FPV escalan con `vh`.
 
 ### 5. Terminal interactiva
-Es un `<input>` dentro del panel de log. `runCmd()` parsea `comando[=| ]argumento`. `setDroneCount()` hace lo siguiente:
+Es un `<input>` en el panel C2 CONSOLE. `runCmd()` activa `toConsole` para que `log()` escriba en la consola (y copie `ok`/`sys`/`warn` al SYSTEM LOG) y `execCmd()` parsea `comando[=| ]argumento`. El autocompletado usa la tabla `CMD_ARGS`. `setDroneCount()` hace lo siguiente:
 - Libera los drones sobrantes (`dispose()` de materiales y geometrías).
 - Reconstruye las plataformas y reasigna la plataforma de cada drone.
 - Crea los nuevos drones con despegue escalonado.
@@ -279,12 +298,12 @@ El render por software de un navegador headless va a ~4 FPS, así que se usa **`
 
 ```bash
 npm i --no-save playwright gifsicle && npx playwright install chromium
-node tools/record-gif.mjs                                   # → frames/*.png (1600x900, 12 fps)
+node tools/record-gif.mjs                                   # → frames/*.png (1280x720, 12 fps)
 
 # GIF (paleta optimizada + compresión con pérdida → ~6 MB)
 ffmpeg -framerate 12 -i frames/f%04d.png -vf "fps=8,scale=720:-1:flags=lanczos,palettegen=max_colors=64:stats_mode=diff" pal.png
 ffmpeg -framerate 12 -i frames/f%04d.png -i pal.png -lavfi "fps=8,scale=720:-1:flags=lanczos[x];[x][1:v]paletteuse=dither=none:diff_mode=rectangle" tmp.gif
-npx gifsicle -O3 --lossy=100 tmp.gif -o assets/demo.gif
+npx gifsicle -O3 --lossy=160 --colors 48 tmp.gif -o assets/demo.gif
 
 # MP4 en mejor calidad
 ffmpeg -framerate 12 -i frames/f%04d.png -vf scale=1280:-2 -c:v libx264 -pix_fmt yuv420p -crf 28 -movflags +faststart assets/demo.mp4
