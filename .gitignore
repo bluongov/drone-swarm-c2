@@ -2,3 +2,4 @@ README.private.md
 *:Zone.Identifier
 node_modules/
 frames/
+tools/.cache/

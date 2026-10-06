@@ -186,7 +186,7 @@ body.min #hud > :not(#top):not(#center), body.min .col > *{display:none}
   #pMap{grid-area:center;justify-self:end;align-self:start;width:min(38vw,170px);z-index:1}
   #term{height:98px;padding:6px 8px} #term .title{display:none}
   #log{font-size:9.5px} .ln:not(.cursor-line) .ts{display:none} .lv{width:4ch;margin-right:5px}
-  #ctrl{bottom:6px} #ctrl button{padding:0 7px}
+  #ctrl{bottom:6px;gap:3px} #ctrl button{padding:0 6px;letter-spacing:.05em} #ctrl .sep{margin:4px 0}
 }
 /* Móvil horizontal */
 @media (max-height:500px) and (orientation:landscape){
@@ -238,8 +238,8 @@ body.min #hud > :not(#top):not(#center), body.min .col > *{display:none}
 
   <div id="center">
     <div id="banner"><div class="a">▲ RETASKING SWARM ▲</div><div class="b" id="bannerTxt">PATROL</div></div>
-    <div id="hint">[ENTER] terminal · [CLICK] waypoint/objetivo · [1-4] modo · [C] cámara · [A] auto · [H] HUD · [F] pantalla completa · <span id="cursor">—</span></div>
-    <div id="ctrl"><button data-mode="PATROL">PATROL</button><button data-mode="ORBIT">ORBIT</button><button data-mode="FORMATION">FORM</button><button data-mode="SCAN">SCAN</button><span class="sep"></span><button id="bCam">CAM</button><button id="bHud">HUD</button></div>
+    <div id="hint">[ENTER] terminal · [CLICK] waypoint/objetivo · [1-4] modo · [C] cámara · [V] vista 2D/3D · [R] fijar cámara · [A] auto · [H] HUD · [F] pantalla completa · <span id="cursor">—</span></div>
+    <div id="ctrl"><button data-mode="PATROL">PATROL</button><button data-mode="ORBIT">ORBIT</button><button data-mode="FORMATION">FORM</button><button data-mode="SCAN">SCAN</button><span class="sep"></span><button id="bCam">CAM</button><button id="b2d">2D</button><button id="bStill">LOCK</button><button id="bHud">HUD</button></div>
   </div>
 
   <aside class="col" id="right">
@@ -268,6 +268,8 @@ body.min #hud > :not(#top):not(#center), body.min .col > *{display:none}
   </section>
 </div>
 
+<script src="cac-shapes.js"></script>
+<script src="assets/valencia-city.js"></script>
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
@@ -277,6 +279,7 @@ body.min #hud > :not(#top):not(#center), body.min .col > *{display:none}
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { MapControls } from 'three/addons/controls/MapControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -290,8 +293,11 @@ let PROJECT = (params.get('name') || 'HALCYON').toUpperCase().slice(0, 24);
 const SMALL_SCREEN = Math.min(innerWidth, innerHeight) < 600 || matchMedia('(pointer:coarse)').matches;
 let N = Math.min(150, Math.max(1, parseInt(params.get('drones')) || (SMALL_SCREEN ? 30 : 60)));
 let QUALITY = params.has('quality') ? (params.get('quality') === 'low' ? 'low' : 'high') : (SMALL_SCREEN ? 'low' : 'high');
-const LAT0 = parseFloat(params.get('lat')) || 39.4699;   // Valencia por defecto
-const LON0 = parseFloat(params.get('lon')) || -0.3763;
+// cámara: view=2d (vista cenital ortográfica) · still=1 (sin rotación ni seguimiento) · rotate=0 / follow=0 por separado
+let VIEW = params.get('view') === '2d' ? '2D' : '3D';
+let ROTATE = params.get('still') !== '1' && params.get('rotate') !== '0';
+let FOLLOW = params.get('still') !== '1' && params.get('follow') !== '0';
+const AREA = 280;                       // semilado de la zona de operaciones (1 unidad = 2 m → ±560 m)
 const MAXS = 20, MAXF = 28, R_NEI = 16, R_SEP = 7;
 const MODES = ['PATROL', 'ORBIT', 'FORMATION', 'SCAN'];
 const MODE_W = {
@@ -323,25 +329,38 @@ $('#scene').appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x02070c);
-scene.fog = new THREE.FogExp2(0x02070c, 0.0026);
+const FOG3D = new THREE.FogExp2(0x02070c, 0.0019);
+scene.fog = FOG3D;
 
-const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.5, 2500);
-camera.position.set(170, 115, 170);
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.5, 3000);
+camera.position.set(110, 140, -180);   // from the Túria park (NE), looking at the complex
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
-controls.autoRotate = true;
+controls.autoRotate = ROTATE;
 controls.autoRotateSpeed = 0.35;
 controls.maxPolarAngle = Math.PI * 0.47;
 controls.minDistance = 30;
-controls.maxDistance = 750;
-controls.target.set(0, 25, 0);
+controls.maxDistance = 950;
+controls.target.set(-50, 20, 60);
 // embed=1: sin zoom con rueda para que la página contenedora pueda hacer scroll sobre el iframe
 if (params.get('embed') === '1') controls.enableZoom = false;
+// 2D: cámara ortográfica cenital, norte arriba; solo desplazar (arrastrar) y zoom (rueda / pellizco)
+const topCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 1400);
+const topControls = new MapControls(topCam, renderer.domElement);
+topControls.enableRotate = false; topControls.enableDamping = true;
+topControls.minPolarAngle = topControls.maxPolarAngle = 0;
+topControls.minZoom = 0.5; topControls.maxZoom = 10;
+topControls.enableZoom = params.get('embed') !== '1';
+topControls.target.set(-20, 0, 57);                 // centro del complejo
+topCam.position.set(-20, 700, 57.01);
+topControls.enabled = false; topControls.update();
+let cam = camera;                                   // cámara activa (3D o 2D)
 
 const fpvCam = new THREE.PerspectiveCamera(70, 1.6, 0.3, 900);
 
 const composer = new EffectComposer(renderer);
-composer.addPass(new RenderPass(scene, camera));
+const renderPass = new RenderPass(scene, camera);
+composer.addPass(renderPass);
 const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.85, 0.5, 0.18);
 composer.addPass(bloom);
 bloom.enabled = QUALITY !== 'low';
@@ -352,62 +371,269 @@ const sun = new THREE.DirectionalLight(0x88ccff, 1.1);
 sun.position.set(100, 200, 50);
 scene.add(sun);
 
-// ================= TERRAIN =================
-function hgt(x, z) {
-  const m = THREE.MathUtils.smoothstep(Math.hypot(x, z), 170, 320);
-  return m * (Math.sin(x * 0.02) * Math.cos(z * 0.025) * 18 + Math.sin(x * 0.05 + z * 0.03) * 6 + 16);
+// ================= SITE: VALENCIA (Ciutat de les Arts i les Ciències) =================
+// Real place. The Calatrava / Candela buildings are implicit formulas (cac-shapes.js) sampled into cubes;
+// the city around them is OpenStreetMap baked into two rasters (assets/valencia-city.js, tools/osm-city.py).
+// Frames · site: metres, x east / y north (origin CITY.origin) · grid: site rotated by CITY.theta around the
+// drone base, so every voxel follows the complex · scene: X east, Z south, origin = drone base, 1 unit = 2 m.
+const { BUILDINGS: CAC_B } = window.CAC, CITY = window.CITY;
+const SC = 0.5, M_PER_U = 1 / SC;                                  // scene units per metre
+const TH = CITY.theta * Math.PI / 180, CT = Math.cos(TH), ST = Math.sin(TH);
+const GC = CITY.cell, GN = CITY.n, GHALF = GN * GC / 2;          // OSM raster: GN × GN cells of GC metres
+const [BX, BY] = CITY.base, R_E = 6371008.8, COSLAT = Math.cos(CITY.origin[0] * Math.PI / 180);
+const PIN = [39.457442, -0.355547];                               // RTK reference station (pool in front of the Palau)
+const VOX = SMALL_SCREEN ? 3 : 2;                                 // edge of a Calatrava cube, metres
+const siteToScene = (x, y) => V3((x - BX) * SC, 0, -(y - BY) * SC);
+const geoToSite = (lat, lon) => [(lon - CITY.origin[1]) * Math.PI / 180 * R_E * COSLAT, (lat - CITY.origin[0]) * Math.PI / 180 * R_E];
+function sceneToGeo(X, Z) {
+  const x = X / SC + BX, y = -Z / SC + BY;
+  return [CITY.origin[0] + y / R_E * 180 / Math.PI, CITY.origin[1] + x / (R_E * COSLAT) * 180 / Math.PI];
 }
+function sceneToGrid(X, Z) { const dx = X / SC, dy = -Z / SC; return [dx * CT + dy * ST, -dx * ST + dy * CT]; }
+// everything voxel lives in this group, in grid coordinates (x = gu·SC, z = −gv·SC)
+const gridGroup = new THREE.Group(); gridGroup.rotation.y = TH; scene.add(gridGroup);
+
+// height map: top of whatever stands in each GC-metre cell (scene units) → collision + goal altitudes
+const HM = new Float32Array(GN * GN), CACM = new Uint8Array(GN * GN);
+function topAt(X, Z) {
+  const [gu, gv] = sceneToGrid(X, Z);
+  const i = Math.floor((gu + GHALF) / GC), j = Math.floor((gv + GHALF) / GC);
+  return i < 0 || j < 0 || i >= GN || j >= GN ? 0 : HM[j * GN + i];
+}
+const topNear = (X, Z, r = 8) => Math.max(topAt(X, Z), topAt(X + r, Z), topAt(X - r, Z), topAt(X, Z + r), topAt(X, Z - r));
+
+async function gunzip64(s) {
+  const bin = Uint8Array.from(atob(s), c => c.charCodeAt(0));
+  return new Uint8Array(await new Response(new Blob([bin]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
+}
+const [CITY_H, CITY_C] = await Promise.all([gunzip64(CITY.h), gunzip64(CITY.c)]);
+
+// Voxel look: Lambert cubes + glowing lattice lines drawn in the mesh's own grid (so a stretched box still
+// shows one square per cell) + uReveal, a height above which nothing is drawn (the "printing" boot effect).
+const revealing = [];
+const VOX_GAIN = { value: QUALITY === 'low' ? 1.7 : 1 };                 // brighter lattice when there is no bloom (quality=low)
+function voxMaterial(cell, edge, edgeAmt, self = 0) {
+  const m = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const u = { uCell: { value: cell }, uEdge: { value: new THREE.Color(edge) }, uEdgeAmt: { value: edgeAmt }, uReveal: { value: -1 }, uSelf: { value: self }, uGain: VOX_GAIN };
+  m.userData.u = u;
+  m.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, u);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vGP;\nvarying vec3 vON;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vec4 gp4 = vec4(transformed, 1.0);
+        #ifdef USE_INSTANCING
+          gp4 = instanceMatrix * gp4;
+        #endif
+        vGP = gp4.xyz; vON = normal;`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vGP;\nvarying vec3 vON;\nuniform vec3 uCell, uEdge;\nuniform float uEdgeAmt, uReveal, uSelf, uGain;')
+      .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\n  if (vGP.y > uReveal) discard;')
+      .replace('#include <opaque_fragment>', `
+        vec3 gq = vGP / uCell, fw = fwidth(gq);
+        vec3 f = abs(fract(gq + 0.5) - 0.5) + step(0.5, abs(vON)) * 9.0;      // skip the axis along the normal
+        vec3 l = (1.0 - smoothstep(fw * 0.5, fw * 1.5, f)) * (1.0 - smoothstep(0.15, 0.45, fw));
+        float band = 1.0 - smoothstep(0.0, 1.2, uReveal - vGP.y);
+        outgoingLight += diffuseColor.rgb * uSelf * uGain + uEdge * (max(max(l.x, l.y), l.z) * uEdgeAmt * uGain + band * 1.6);
+        #include <opaque_fragment>`);
+  };
+  m.customProgramCacheKey = () => 'vox';
+  return m;
+}
+function reveal(mesh, top, delay, dur, onStart) { revealing.push({ u: mesh.material.userData.u.uReveal, top, t: -delay, dur, onStart }); }
+
+// ---- ground: OSM land cover as a pixel texture (park, trees, water, roads, rail…) ----
 {
-  const tg = new THREE.PlaneGeometry(1000, 1000, 130, 130);
-  tg.rotateX(-Math.PI / 2);
-  const p = tg.attributes.position;
-  for (let i = 0; i < p.count; i++) p.setY(i, hgt(p.getX(i), p.getZ(i)));
-  tg.computeVertexNormals();
-  scene.add(new THREE.Mesh(tg, new THREE.MeshBasicMaterial({ color: 0x03101a, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 })));
-  scene.add(new THREE.Mesh(tg, new THREE.MeshBasicMaterial({ color: 0x0d5566, wireframe: true, transparent: true, opacity: 0.32 })));
+  const COL = [0x07131a, 0x0a261d, 0x082018, 0x0a3550, 0x142d38, 0x0e212b, 0x30200f, 0x1b1911];
+  const data = new Uint8Array(GN * GN * 4), c = new THREE.Color();
+  for (let k = 0; k < GN * GN; k++) {
+    c.setHex(COL[CITY_C[k]] ?? COL[0]);
+    data[k * 4] = c.r * 255; data[k * 4 + 1] = c.g * 255; data[k * 4 + 2] = c.b * 255; data[k * 4 + 3] = 255;
+  }
+  const tex = new THREE.DataTexture(data, GN, GN);
+  tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.LinearMipmapLinearFilter; tex.generateMipmaps = true;
+  tex.anisotropy = 4; tex.needsUpdate = true;
+  const gm = new THREE.MeshBasicMaterial({ map: tex, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+  gm.onBeforeCompile = sh => {
+    sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+      vec2 gq = vMapUv * ${GN}.0, gw = fwidth(gq), gf = abs(fract(gq) - 0.5);
+      vec2 gl = smoothstep(0.5 - gw * 1.2, vec2(0.5), gf) * (1.0 - smoothstep(0.2, 0.5, max(gw.x, gw.y)));
+      diffuseColor.rgb += max(gl.x, gl.y) * vec3(0.008, 0.028, 0.036);`);
+  };
+  const S = GN * GC * SC;
+  gridGroup.add(new THREE.Mesh(new THREE.PlaneGeometry(S, S).rotateX(-Math.PI / 2), gm));
+  // outside the mapped area: dark ground + faint survey grid
+  const out = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x03101a }));
+  out.position.y = -0.3; scene.add(out);
+  const grid = new THREE.GridHelper(6000, 300, 0x0d5566, 0x0d5566);
+  grid.material.transparent = true; grid.material.opacity = 0.18; grid.position.y = -0.2; gridGroup.add(grid);
 }
 
-// ================= CITY / OBSTACLES =================
-const obstacles = [];
-const beacons = [];
-{
-  const bMat = new THREE.MeshStandardMaterial({ color: 0x07141d, roughness: 0.9, metalness: 0.2, transparent: true, opacity: 0.92 });
-  const eMat = new THREE.LineBasicMaterial({ color: 0x2bd4ff, transparent: true, opacity: 0.55 });
-  const beaconGeo = new THREE.SphereGeometry(0.7, 8, 8);
-  let tries = 0;
-  while (obstacles.length < 28 && tries++ < 800) {
-    const x = rand(-160, 160), z = rand(-160, 160);
-    if (Math.hypot(x, z) < 48) continue;
-    const w = rand(8, 20), d = rand(8, 20), h = rand(14, 60), r = Math.hypot(w, d) / 2;
-    if (obstacles.some(o => Math.hypot(o.x - x, o.z - z) < o.r + r + 8)) continue;
-    const g = new THREE.BoxGeometry(w, h, d); g.translate(0, h / 2, 0);
-    const m = new THREE.Mesh(g, bMat); m.position.set(x, 0, z); scene.add(m);
-    const e = new THREE.LineSegments(new THREE.EdgesGeometry(g), eMat); e.position.set(x, 0, z); scene.add(e);
-    const bc = new THREE.Mesh(beaconGeo, new THREE.MeshBasicMaterial({ color: 0xff3344, transparent: true }));
-    bc.position.set(x, h + 0.9, z); bc.userData.ph = Math.random() * 6; scene.add(bc); beacons.push(bc);
-    obstacles.push({ x, z, r, w, d, h, type: 'BLD', name: 'STRUCT-' + pad2(obstacles.length + 1) });
+// ---- city: OSM building heights, equal-height cells merged into boxes (one floor line every 3.1 m) ----
+const beacons = [], beaconGeo = new THREE.SphereGeometry(0.7, 8, 8);
+function addBeacon(x, y, z, color = 0xff3344) {
+  const bc = new THREE.Mesh(beaconGeo, new THREE.MeshBasicMaterial({ color, transparent: true }));
+  bc.position.set(x, y, z); bc.userData.ph = Math.random() * 6; scene.add(bc); beacons.push(bc);
+}
+const cityMesh = (() => {
+  const used = new Uint8Array(GN * GN), rects = [];
+  for (let j = 0; j < GN; j++) for (let i = 0; i < GN; i++) {
+    const h = CITY_H[j * GN + i]; if (!h || used[j * GN + i]) continue;
+    let w = 1; while (i + w < GN && CITY_H[j * GN + i + w] === h && !used[j * GN + i + w]) w++;
+    let d = 1;
+    grow: while (j + d < GN) { for (let x = 0; x < w; x++) { const k = (j + d) * GN + i + x; if (CITY_H[k] !== h || used[k]) break grow; } d++; }
+    for (let y = 0; y < d; y++) for (let x = 0; x < w; x++) used[(j + y) * GN + i + x] = 1;
+    rects.push([i, j, w, d, h]);
   }
-  // No-fly zones
-  const nfzMat = new THREE.MeshBasicMaterial({ color: 0xff3344, transparent: true, opacity: 0.05, side: THREE.DoubleSide, depthWrite: false });
-  const nfzLine = new THREE.LineBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0.6 });
-  for (let k = 0; k < 2; k++) {
-    let x, z, r, ok = false, t = 0;
-    while (!ok && t++ < 200) {
-      const a = rand(0, Math.PI * 2), R = rand(110, 165);
-      x = Math.cos(a) * R; z = Math.sin(a) * R; r = rand(18, 26);
-      ok = !obstacles.some(o => Math.hypot(o.x - x, o.z - z) < o.r + r + 4);
+  const geo = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
+  const mesh = new THREE.InstancedMesh(geo, voxMaterial(new THREE.Vector3(GC * SC, 3.1 * SC, GC * SC), 0x2bd4ff, 0.13), rects.length);
+  const m4 = new THREE.Matrix4(), col = new THREE.Color();
+  rects.forEach(([i, j, w, d, h], n) => {
+    m4.makeScale(w * GC * SC, h * SC, d * GC * SC);
+    m4.setPosition(((i + w / 2) * GC - GHALF) * SC, 0, -((j + d / 2) * GC - GHALF) * SC);
+    mesh.setMatrixAt(n, m4);
+    mesh.setColorAt(n, col.setHSL(0.56, 0.45, 0.035 + Math.min(h, 90) / 90 * 0.07));
+    for (let y = 0; y < d; y++) for (let x = 0; x < w; x++) HM[(j + y) * GN + i + x] = h * SC;
+  });
+  mesh.computeBoundingSphere();
+  gridGroup.add(mesh);
+  // aircraft-warning lights on the tallest towers
+  const toScene = (i, j, y) => new THREE.Vector3(((i + 0.5) * GC - GHALF) * SC, y, -((j + 0.5) * GC - GHALF) * SC).applyAxisAngle(V3(0, 1, 0), TH);
+  rects.filter(r => r[4] >= 60).sort((a, b) => b[4] - a[4]).slice(0, 14)
+    .forEach(([i, j, w, d, h]) => { const p = toScene(i + w / 2 - 0.5, j + d / 2 - 0.5, h * SC + 0.9); addBeacon(p.x, p.y, p.z); });
+  return mesh;
+})();
+
+// ---- Calatrava / Candela buildings: formula → cubes on the shared grid (only surface cubes are drawn) ----
+const VCOL = { 1: 0x7fb3c6, 2: 0xd2f1ff, 3: 0x1f7fa6, 4: 0x10202b, 5: 0x2b4fd0, 6: 0x8fa6b8, 7: 0x2f7a46, 8: 0x33424d, 9: 0x5f6a66, 10: 0x6f8494, 11: 0xc8dbe4 };
+const LM_INFO = {
+  palau: ['PAL', 'Palau de les Arts'], hemisferic: ['HMF', "L'Hemisfèric"], museu: ['MUS', 'Museu de les Ciències'],
+  umbracle: ['UMB', "L'Umbracle"], agora: ['AGO', "L'Àgora"], assut: ['AST', "Pont de l'Assut de l'Or"],
+  submari: ['OCE', "L'Oceanogràfic"], acces: ['OCE'], aviari: ['OCE'], artic: ['OCE'],
+};
+const landmarks = [];                                             // { id, code, name, x, z, r, h, nfz }
+const cacMeshes = [];
+const cacVoxels = (() => {
+  const h = VOX, hs = h * SC, cubeGeo = new THREE.BoxGeometry(1, 1, 1), m4 = new THREE.Matrix4(), col = new THREE.Color();
+  let total = 0;
+  for (const b of CAC_B) {
+    const br = b.place.deg * Math.PI / 180, bc = Math.cos(br), bs = Math.sin(br), [u0, u1] = b.box.u, [v0, v1] = b.box.v;
+    let gu0 = 1e9, gu1 = -1e9, gv0 = 1e9, gv1 = -1e9;
+    for (const u of [u0, u1]) for (const v of [v0, v1]) {
+      const dx = b.place.x + u * bc - v * bs - BX, dy = b.place.y + u * bs + v * bc - BY;
+      const gu = dx * CT + dy * ST, gv = -dx * ST + dy * CT;
+      gu0 = Math.min(gu0, gu); gu1 = Math.max(gu1, gu); gv0 = Math.min(gv0, gv); gv1 = Math.max(gv1, gv);
     }
-    const h = 140;
-    const g = new THREE.CylinderGeometry(r, r, h, 40, 1, true); g.translate(0, h / 2, 0);
+    const i0 = Math.floor(gu0 / h), j0 = Math.floor(gv0 / h), nx = Math.ceil(gu1 / h) - i0, ny = Math.ceil(gv1 / h) - j0, nz = Math.ceil(b.box.z[1] / h);
+    const mats = new Uint8Array(nx * ny * nz), nxy = nx * ny;
+    let topK = 0, topI = 0, topJ = 0;
+    for (let k = 0; k < nz; k++) {
+      const z = (k + 0.5) * h;
+      for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+        const gu = (i0 + i + 0.5) * h, gv = (j0 + j + 0.5) * h;
+        const x = BX + gu * CT - gv * ST - b.place.x, y = BY + gu * ST + gv * CT - b.place.y;
+        const u = x * bc + y * bs, v = -x * bs + y * bc;
+        if (u < u0 || u > u1 || v < v0 || v > v1) continue;
+        const m = b.detailed(u, v, z, h);
+        if (!m) continue;
+        mats[i + nx * (j + ny * k)] = m;
+        const ci = Math.floor((gu + GHALF) / GC), cj = Math.floor((gv + GHALF) / GC), ck = cj * GN + ci;
+        if (ci >= 0 && cj >= 0 && ci < GN && cj < GN) { HM[ck] = Math.max(HM[ck], (k + 1) * hs); CACM[ck] = 1; }
+        if (k >= topK) { topK = k; topI = i; topJ = j; }
+      }
+    }
+    // surface cubes only (a cube with an empty neighbour)
+    const surf = [];
+    for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+      const idx = i + nx * (j + ny * k), m = mats[idx]; if (!m) continue;
+      if (k === nz - 1 || i === 0 || j === 0 || i === nx - 1 || j === ny - 1 || !mats[idx - 1] || !mats[idx + 1] ||
+          !mats[idx - nx] || !mats[idx + nx] || !mats[idx + nxy] || (k > 0 && !mats[idx - nxy])) surf.push(i, j, k, m);
+    }
+    const n = surf.length / 4; total += n;
+    const nfz = b.id === 'hemisferic';
+    const mesh = new THREE.InstancedMesh(cubeGeo, voxMaterial(new THREE.Vector3(hs, hs, hs), nfz ? 0xff4d5e : 0x3ff0ff, nfz ? 0.55 : 0.42, 0.22), n);
+    for (let p = 0; p < n; p++) {
+      const i = surf[p * 4], j = surf[p * 4 + 1], k = surf[p * 4 + 2], m = surf[p * 4 + 3];
+      m4.makeScale(hs, hs, hs); m4.setPosition((i0 + i + 0.5) * hs, (k + 0.5) * hs, -(j0 + j + 0.5) * hs);
+      mesh.setMatrixAt(p, m4);
+      const f = 0.88 + 0.16 * (((i0 + i) * 73856093 ^ (j0 + j) * 19349663 ^ k * 83492791) >>> 0) / 4294967296;
+      mesh.setColorAt(p, col.setHex(VCOL[m] || 0x7fb3c6).multiplyScalar(f));
+    }
+    mesh.computeBoundingSphere();
+    mesh.userData = { id: b.id, n };
+    gridGroup.add(mesh); cacMeshes.push(mesh);
+    // landmark record (scene coords). Oceanogràfic pavilions are merged into one landmark below.
+    const c = siteToScene(b.place.x, b.place.y);
+    let r = 0;
+    for (let p = 0; p < n; p++) {
+      const gu = (i0 + surf[p * 4] + 0.5) * h, gv = (j0 + surf[p * 4 + 1] + 0.5) * h;
+      const X = (gu * CT - gv * ST) * SC, Z = -(gu * ST + gv * CT) * SC;
+      r = Math.max(r, Math.hypot(X - c.x, Z - c.z));
+    }
+    const [code, name] = LM_INFO[b.id] || [b.id.slice(0, 3).toUpperCase(), b.name];
+    const top = (topK + 1) * hs;
+    landmarks.push({ id: b.id, code, name: name || b.name, x: c.x, z: c.z, r: b.id === 'assut' ? 10 : r, h: top, nfz, mesh });
+    // aircraft-warning light on the highest point
+    const tg = (i0 + topI + 0.5) * h, tv = (j0 + topJ + 0.5) * h;
+    if (top > 20) addBeacon((tg * CT - tv * ST) * SC, top + 0.9, -(tg * ST + tv * CT) * SC);
+  }
+  // one landmark for the four Oceanogràfic pavilions
+  const oce = landmarks.filter(l => l.code === 'OCE');
+  if (oce.length) {
+    const x = oce.reduce((s, l) => s + l.x, 0) / oce.length, z = oce.reduce((s, l) => s + l.z, 0) / oce.length;
+    const r = Math.max(...oce.map(l => Math.hypot(l.x - x, l.z - z) + l.r));
+    oce.forEach(l => landmarks.splice(landmarks.indexOf(l), 1));
+    landmarks.push({ id: 'oceanografic', code: 'OCE', name: "L'Oceanogràfic", x, z, r, h: Math.max(...oce.map(l => l.h)), nfz: false });
+  }
+  return total;
+})();
+const orbitTargets = landmarks.filter(l => !l.nfz);
+const nearestLandmark = d => landmarks.reduce((a, l) => Math.hypot(l.x - d.pos.x, l.z - d.pos.z) < Math.hypot(a.x - d.pos.x, a.z - d.pos.z) ? l : a);
+
+// boot effect: the city rises, then each Calatrava building is "printed" layer by layer
+reveal(cityMesh, 60, 0.2, 2.2);
+cacMeshes.forEach((m, i) => {
+  const b = CAC_B.find(b => b.id === m.userData.id);
+  reveal(m, b.box.z[1] * SC + 1, 1.6 + i * 0.55, 1.8, () =>
+    log('ok', `SITE MODEL: ${b.name} · ${m.userData.n.toLocaleString('en-US')} voxels @ ${VOX} m`));
+});
+
+// ---- RTK reference station on the pin (pool in front of the Palau) ----
+const rtk = (() => {
+  const p = siteToScene(...geoToSite(...PIN));
+  const mat = new THREE.MeshBasicMaterial({ color: 0x4dff9a, transparent: true, opacity: 0.85 });
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.4, 10, 6).translate(0, 5, 0), mat);
+  const dish = new THREE.Mesh(new THREE.OctahedronGeometry(1.1), mat); dish.position.y = 10.8;
+  const ring = new THREE.Mesh(new THREE.RingGeometry(3, 3.4, 40).rotateX(-Math.PI / 2), mat); ring.position.y = 0.3;
+  const g = new THREE.Group(); g.add(mast, dish, ring); g.position.copy(p); scene.add(g);
+  addBeacon(p.x, 12.2, p.z, 0x4dff9a);
+  return { x: p.x, z: p.z, dish };
+})();
+
+// ---- geofence: big NFZ over L'Hemisfèric + one smaller temporary restriction ----
+const obstacles = [];
+{
+  const nfzMat = new THREE.MeshBasicMaterial({ color: 0xff3344, transparent: true, opacity: 0.04, side: THREE.DoubleSide, depthWrite: false });
+  const nfzLine = new THREE.LineBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0.6 });
+  const addNfz = (x, z, r, h, name, label) => {
+    const g = new THREE.CylinderGeometry(r, r, h, 64, 1, true); g.translate(0, h / 2, 0);
     const m = new THREE.Mesh(g, nfzMat); m.position.set(x, 0, z); scene.add(m);
     for (let yy = 0; yy <= h; yy += 20) {
-      const pts = []; for (let i = 0; i <= 48; i++) { const a = i / 48 * Math.PI * 2; pts.push(V3(x + Math.cos(a) * r, yy + 0.2, z + Math.sin(a) * r)); }
+      const pts = []; for (let i = 0; i <= 72; i++) { const a = i / 72 * Math.PI * 2; pts.push(V3(x + Math.cos(a) * r, yy + 0.3, z + Math.sin(a) * r)); }
       scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), nfzLine));
     }
-    obstacles.push({ x, z, r, h, type: 'NFZ', name: 'NFZ-' + 'AB'[k] });
+    obstacles.push({ x, z, r, h, type: 'NFZ', name, label });
+  };
+  const hmf = landmarks.find(l => l.nfz);
+  if (hmf) addNfz(hmf.x, hmf.z, 46, 110, 'NFZ-A', "L'HEMISFÈRIC");
+  let x, z, r, ok = false, t = 0;
+  while (!ok && t++ < 300) {
+    const a = rand(0, Math.PI * 2), R = rand(120, 230);
+    x = Math.cos(a) * R; z = Math.sin(a) * R; r = rand(18, 24);
+    ok = !obstacles.some(o => Math.hypot(o.x - x, o.z - z) < o.r + r + 20) && !landmarks.some(l => Math.hypot(l.x - x, l.z - z) < l.r + r);
   }
+  addNfz(x, z, r, 90, 'NFZ-B', 'TFR');
 }
-const buildings = obstacles.filter(o => o.type === 'BLD');
 
 // ================= BASE / PADS =================
 const pads = [], PSP = 4.5;
@@ -444,9 +670,9 @@ const orbitMarker = new THREE.Group(); scene.add(orbitMarker);
 }
 const leaderMarker = new THREE.Mesh(new THREE.OctahedronGeometry(2.2), new THREE.MeshBasicMaterial({ color: 0xb58cff, wireframe: true }));
 scene.add(leaderMarker);
-const scanBand = new THREE.Mesh(new THREE.PlaneGeometry(340, 3).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x4dff9a, transparent: true, opacity: 0.55, depthWrite: false }));
+const scanBand = new THREE.Mesh(new THREE.PlaneGeometry(2 * AREA - 20, 3).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x4dff9a, transparent: true, opacity: 0.55, depthWrite: false }));
 scanBand.position.y = 0.3; scene.add(scanBand);
-const scanWall = new THREE.Mesh(new THREE.PlaneGeometry(340, 70), new THREE.MeshBasicMaterial({ color: 0x4dff9a, transparent: true, opacity: 0.035, side: THREE.DoubleSide, depthWrite: false }));
+const scanWall = new THREE.Mesh(new THREE.PlaneGeometry(2 * AREA - 20, 70), new THREE.MeshBasicMaterial({ color: 0x4dff9a, transparent: true, opacity: 0.035, side: THREE.DoubleSide, depthWrite: false }));
 scene.add(scanWall);
 
 const hoverRing = new THREE.Mesh(new THREE.RingGeometry(3, 3.5, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 }));
@@ -613,7 +839,7 @@ class Drone {
       _des.setLength(MAXS * Math.min(1, gd / W.arrive)).sub(this.vel);
       limit(_des, MAXF); _acc.addScaledVector(_des, W.goal);
     }
-    // obstacle / geofence avoidance
+    // geofence (NFZ cylinders)
     for (const o of obstacles) {
       const dx = this.pos.x - o.x, dz = this.pos.z - o.z;
       const d = Math.hypot(dx, dz) || 0.01;
@@ -622,19 +848,27 @@ class Drone {
         const s = (m - d) / 14;
         _acc.x += dx / d * s * MAXF * 2.5;
         _acc.z += dz / d * s * MAXF * 2.5;
-        if (o.type === 'BLD' && d < o.r + 5) _acc.y += MAXF * 1.5 * s;
-        if (o.type === 'NFZ' && d < o.r + 8 && T - this.nfzT > 20) {
+        if (d < o.r + 8 && T - this.nfzT > 20) {
           this.nfzT = T;
-          if (Math.random() < 0.5) log('warn', `GEOFENCE: ${this.id} deflected from ${o.name} · margin ${(d - o.r).toFixed(1)}m`);
+          if (Math.random() < 0.5) log('warn', `GEOFENCE: ${this.id} deflected from ${o.name} (${o.label}) · margin ${((d - o.r) * M_PER_U).toFixed(1)}m`);
         }
       }
     }
+    // structures (city + Calatrava voxels, from the height map): climb over what is ahead, slide off walls
+    const px = this.pos.x, pz = this.pos.z, py = this.pos.y;
+    let ahead = topAt(px, pz);
+    for (const s of [0.4, 0.8, 1.3]) ahead = Math.max(ahead, topAt(px + this.vel.x * s, pz + this.vel.z * s));
+    if (ahead + 7 > py) _acc.y += Math.min(ahead + 7 - py, 12) * 6;
+    for (let k = 0; k < 8; k++) {
+      const a = k * Math.PI / 4, ox = Math.cos(a), oz = Math.sin(a), t = topAt(px + ox * 7, pz + oz * 7);
+      if (t + 4 > py) { const s = Math.min(1, (t + 4 - py) / 8) * MAXF * 1.4; _acc.x -= ox * s; _acc.z -= oz * s; }
+    }
     // altitude & area bounds
-    if (this.pos.y < 14) _acc.y += (14 - this.pos.y) * 5;
-    if (this.pos.y > 100) _acc.y -= (this.pos.y - 100) * 5;
+    if (py < 14) _acc.y += (14 - py) * 5;
+    if (py > 100) _acc.y -= (py - 100) * 5;
     for (const ax of ['x', 'z']) {
       const v = this.pos[ax];
-      if (Math.abs(v) > 200) _acc[ax] -= Math.sign(v) * (Math.abs(v) - 200) * 3;
+      if (Math.abs(v) > AREA) _acc[ax] -= Math.sign(v) * (Math.abs(v) - AREA) * 3;
     }
     limit(_acc, MAXF * 2.5);
     this.lastAcc.copy(_acc);
@@ -686,6 +920,19 @@ let waypoints = [], wpIdx = 0, routeMats = [];
 const orbitCenter = V3();
 const leader = V3(), leaderVel = V3(1, 0, 0);
 let sweepZ = 0, modeTimer = 0, auto = true, lastAssign = -99, lastActiveCount = -1, orbitFromClick = false;
+let orbitR0 = 36, orbitAlt0 = 30;                 // ring radius / altitude of the inner orbit (fit to the target)
+function orbitLandmark(l) {
+  orbitCenter.set(l.x, 0, l.z);
+  orbitR0 = clamp(l.r + 12, 30, 90);
+  orbitAlt0 = l.id === 'assut' ? l.h + 8 : clamp(l.h * 0.6, 26, 70);   // bridge: stay above the cable fan
+}
+function orbitPoint(p) {                         // operator click: snap to a landmark if it was clicked
+  const l = orbitTargets.find(l => Math.hypot(l.x - p.x, l.z - p.z) < Math.max(l.r, 16));
+  if (l) { orbitLandmark(l); return l.name; }
+  orbitCenter.set(p.x, 0, p.z); orbitR0 = 36; orbitAlt0 = Math.max(30, topNear(p.x, p.z, 20) + 10);
+  return null;
+}
+const safeAlt = (x, z, y) => Math.min(95, Math.max(y, topNear(x, z, 10) + 12));
 
 function outOfNfz(p) {
   for (const o of obstacles) if (o.type === 'NFZ') {
@@ -698,8 +945,10 @@ function genRoute() {
   waypoints = [];
   const n = 6, a0 = rand(0, Math.PI * 2);
   for (let i = 0; i < n; i++) {
-    const a = a0 + i / n * Math.PI * 2 + rand(-0.3, 0.3), r = rand(70, 160);
-    waypoints.push(outOfNfz(V3(Math.cos(a) * r, rand(30, 52), Math.sin(a) * r)));
+    const a = a0 + i / n * Math.PI * 2 + rand(-0.3, 0.3), r = rand(80, AREA - 30);
+    const w = outOfNfz(V3(Math.cos(a) * r, 0, Math.sin(a) * r));
+    w.y = safeAlt(w.x, w.z, rand(30, 52));
+    waypoints.push(w);
   }
   wpIdx = 0; rebuildRoute();
 }
@@ -719,15 +968,13 @@ function rebuildRoute() {
     routeGroup.add(beam, top, ring);
   });
 }
-const randomBuildingPos = () => { const b = pick(buildings); return V3(b.x, 0, b.z); };
-
 const bannerEl = $('#banner');
 let bannerTimer = 0;
 function setMode(m, why) {
   if (m !== mode) {
     mode = m;
     if (m === 'ORBIT' && !orbitFromClick) {
-      const b = pick(buildings); orbitCenter.set(b.x, 0, b.z);
+      const b = pick(orbitTargets); orbitLandmark(b);
       why = why || `target ${b.name}`;
     }
     if (m === 'PATROL') genRoute();
@@ -754,11 +1001,11 @@ function assignSlots(active) {
 function computeGoals(active, dt) {
   const n = active.length || 1;
   // formation leader path
-  const lx = 140 * Math.sin(T * 0.05), lz = 110 * Math.sin(T * 0.08);
+  const lx = (AREA - 70) * Math.sin(T * 0.05), lz = (AREA - 100) * Math.sin(T * 0.08);
   leaderVel.set(lx - leader.x, 0, lz - leader.z); leader.set(lx, 72, lz);
   if (leaderVel.lengthSq() < 1e-8) leaderVel.set(1, 0, 0);
   leaderVel.normalize();
-  sweepZ = 150 * Math.sin(T * 0.12);
+  sweepZ = (AREA - 40) * Math.sin(T * 0.12);
   const cols = 8;
   for (const d of active) {
     const k = d.slot;
@@ -769,7 +1016,7 @@ function computeGoals(active, dt) {
         break;
       }
       case 'ORBIT': {
-        const ring = k % 3, R = 36 + ring * 14, alt = 30 + ring * 12;
+        const ring = k % 3, R = orbitR0 + ring * 14, alt = orbitAlt0 + ring * 12;
         const a = T * (0.32 - ring * 0.07) * (ring === 1 ? -1 : 1) + (k / n) * Math.PI * 2;
         d.goal.set(orbitCenter.x + Math.cos(a) * R, alt + Math.sin(T + k) * 2, orbitCenter.z + Math.sin(a) * R);
         break;
@@ -784,10 +1031,12 @@ function computeGoals(active, dt) {
         break;
       }
       case 'SCAN': {
-        d.goal.set(-165 + k * (330 / Math.max(1, n - 1)), 58 + (k % 2) * 9, sweepZ);
+        d.goal.set(-AREA + 20 + k * ((2 * AREA - 40) / Math.max(1, n - 1)), 58 + (k % 2) * 9, sweepZ);
         break;
       }
     }
+    // never aim inside a building: lift the goal above whatever stands there
+    if (mode !== 'ORBIT') d.goal.y = safeAlt(d.goal.x, d.goal.z, d.goal.y);
   }
 }
 
@@ -795,7 +1044,7 @@ function computeGoals(active, dt) {
 const CG = 24, cov = new Float32Array(CG * CG).fill(-1e9);
 function markCoverage(active) {
   for (const d of active) {
-    const cx = Math.floor((d.pos.x + 200) / 400 * CG), cz = Math.floor((d.pos.z + 200) / 400 * CG);
+    const cx = Math.floor((d.pos.x + AREA) / (2 * AREA) * CG), cz = Math.floor((d.pos.z + AREA) / (2 * AREA) * CG);
     if (cx >= 0 && cx < CG && cz >= 0 && cz < CG) cov[cz * CG + cx] = T;
   }
 }
@@ -830,7 +1079,9 @@ function chatter() {
   const act = drones.filter(d => d.state === 'ACTIVE'); if (!act.length) return;
   const d = pick(act), d2 = pick(act), W = MODE_W[mode];
   const gen = [
-    () => ['info', `${d.id} telemetry · alt ${d.pos.y.toFixed(1)}m · v ${d.vel.length().toFixed(1)}m/s · hdg ${hdgOf(d)}°`],
+    () => ['info', `${d.id} telemetry · alt ${(d.pos.y * M_PER_U).toFixed(1)}m · v ${(d.vel.length() * M_PER_U).toFixed(1)}m/s · hdg ${hdgOf(d)}°`],
+    () => { const l = nearestLandmark(d); return ['ok', `SURVEY: ${d.id} imaging ${l.name} · ${200 + (Math.random() * 900 | 0)} frames · GSD ${(d.pos.y * M_PER_U / 40).toFixed(1)}cm/px`]; },
+    () => { const l = nearestLandmark(d); return ['info', `LIDAR: ${d.id} ${l.code} point cloud +${(50 + Math.random() * 400 | 0)}k pts · ICP rms ${(Math.random() * 2).toFixed(2)}cm`]; },
     () => ['info', `MESH: route table updated · ${act.length} nodes · max ${1 + (Math.random() * 4 | 0)} hops`],
     () => ['info', `SLAM: keyframe #${kf++} fused · loop-closure err ${(Math.random() * 4).toFixed(2)}cm`],
     () => ['ok', `VISION: ${d.id} detected ${pick(OBJ)} · conf ${(0.8 + Math.random() * 0.19).toFixed(2)} · bbox tracked`],
@@ -852,10 +1103,12 @@ const boot = [
   ['sys', `C2 kernel v4.2.1 booting · project ${PROJECT}`],
   ['sys', `loading swarm manifest · ${N} airframes · quad-X config`],
   ['ok', 'MAVLink bridge online · udp://0.0.0.0:14550'],
-  ['ok', `RTK-GNSS base locked · 23 sats · ${LAT0.toFixed(4)}, ${LON0.toFixed(4)}`],
+  ['ok', `RTK-GNSS reference station locked · 23 sats · ${PIN[0].toFixed(5)}, ${PIN[1].toFixed(5)}`],
+  ['ok', `base ${sceneToGeo(0, 0).map(v => v.toFixed(5)).join(', ')} · Jardí del Túria · València`],
   ['ok', 'mesh network formed · AES-256-GCM session established'],
-  ['sys', 'flocking controller: reynolds/boids v3 · sep/ali/coh + goal + geofence'],
-  ['info', `geofence loaded · ${obstacles.filter(o => o.type === 'NFZ').length} NFZ · ${buildings.length} structures mapped`],
+  ['sys', 'flocking controller: reynolds/boids v3 · sep/ali/coh + goal + geofence + height map'],
+  ['info', `site model: Ciutat de les Arts i les Ciències · ${landmarks.length} landmarks · ${cacVoxels.toLocaleString('en-US')} surface voxels · city © OpenStreetMap`],
+  ['warn', `geofence loaded · ${obstacles.length} NFZ · ${obstacles[0].name} ${obstacles[0].label} r ${(obstacles[0].r * M_PER_U).toFixed(0)}m`],
   ['ok', 'launch sequence authorized · staggered takeoff'],
 ];
 boot.forEach((b, i) => setTimeout(() => log(b[0], b[1]), 150 + i * 280));
@@ -866,52 +1119,81 @@ const groundPlane = new THREE.Plane(V3(0, 1, 0), 0);
 let downPos = null, lastInteraction = -99;
 function groundHit(e) {
   mouse.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
-  raycaster.setFromCamera(mouse, camera);
+  raycaster.setFromCamera(mouse, cam);
   const p = V3();
   return raycaster.ray.intersectPlane(groundPlane, p) ? p : null;
 }
 renderer.domElement.addEventListener('pointermove', e => {
   const p = groundHit(e);
-  if (p && Math.abs(p.x) < 260 && Math.abs(p.z) < 260) {
+  if (p && Math.abs(p.x) < AREA + 60 && Math.abs(p.z) < AREA + 60) {
     hoverRing.visible = true; hoverRing.position.set(p.x, 0.35, p.z);
-    $('#cursor').textContent = `CURSOR E${p.x >= 0 ? '+' : ''}${p.x.toFixed(0)} N${-p.z >= 0 ? '+' : ''}${(-p.z).toFixed(0)}`;
+    $('#cursor').textContent = `CURSOR E${p.x >= 0 ? '+' : ''}${(p.x * M_PER_U).toFixed(0)} N${-p.z >= 0 ? '+' : ''}${(-p.z * M_PER_U).toFixed(0)}`;
   } else hoverRing.visible = false;
 });
 renderer.domElement.addEventListener('pointerdown', e => { downPos = [e.clientX, e.clientY]; lastInteraction = T; });
 renderer.domElement.addEventListener('pointerup', e => {
   if (!downPos || Math.hypot(e.clientX - downPos[0], e.clientY - downPos[1]) > 5) return;
-  const p = groundHit(e); if (!p || Math.abs(p.x) > 200 || Math.abs(p.z) > 200) return;
+  const p = groundHit(e); if (!p || Math.abs(p.x) > AREA || Math.abs(p.z) > AREA) return;
   outOfNfz(p);
   ripple(p, 0xffcc33);
   if (mode === 'PATROL') {
-    waypoints.splice(wpIdx, 0, V3(p.x, rand(32, 48), p.z));
+    waypoints.splice(wpIdx, 0, V3(p.x, safeAlt(p.x, p.z, rand(32, 48)), p.z));
     if (waypoints.length > 8) waypoints.splice((wpIdx + 1) % waypoints.length, 1);
     wpIdx = waypoints.findIndex(w => w.x === p.x && w.z === p.z);
     rebuildRoute();
-    log('sys', `OPERATOR: priority waypoint WP-${wpIdx + 1} @ E${p.x.toFixed(0)} N${(-p.z).toFixed(0)} · swarm rerouting`);
+    log('sys', `OPERATOR: priority waypoint WP-${wpIdx + 1} @ E${(p.x * M_PER_U).toFixed(0)} N${(-p.z * M_PER_U).toFixed(0)} · swarm rerouting`);
   } else {
-    orbitCenter.set(p.x, 0, p.z); orbitFromClick = true;
-    if (mode === 'ORBIT') { log('sys', `OPERATOR: orbit target moved → E${p.x.toFixed(0)} N${(-p.z).toFixed(0)}`); orbitFromClick = false; modeTimer = 0; }
-    else setMode('ORBIT', 'operator designated target');
+    const lm = orbitPoint(p); orbitFromClick = true;
+    if (mode === 'ORBIT') { log('sys', `OPERATOR: orbit target moved → ${lm || `E${(p.x * M_PER_U).toFixed(0)} N${(-p.z * M_PER_U).toFixed(0)}`}`); orbitFromClick = false; modeTimer = 0; }
+    else setMode('ORBIT', `operator designated target${lm ? ' ' + lm : ''}`);
   }
 });
 let camMode = 'ORBIT';
 const lookTarget = V3();
 function toggleCam() {
   camMode = camMode === 'ORBIT' ? 'FOLLOW' : 'ORBIT';
-  if (camMode === 'FOLLOW') { controls.enabled = false; lookTarget.copy(controls.target); }
-  else { controls.enabled = true; controls.target.copy(lookTarget); }
-  log('sys', `CAMERA: ${camMode === 'FOLLOW' ? 'chase cam locked on ' + focus.id : 'orbital overview'}`);
+  if (VIEW === '3D') {
+    if (camMode === 'FOLLOW') { controls.enabled = false; lookTarget.copy(controls.target); }
+    else { controls.enabled = true; controls.target.copy(lookTarget); }
+  }
+  log('sys', `CAMERA: ${camMode === 'FOLLOW' ? (VIEW === '2D' ? 'map centred on ' : 'chase cam locked on ') + focus.id : VIEW === '2D' ? 'free 2D map' : 'orbital overview'}`);
   syncCtrl();
 }
+// vista 2D (cenital ortográfica) / 3D (perspectiva)
+function setView(v, quiet) {
+  VIEW = v; const two = v === '2D';
+  cam = two ? topCam : camera;
+  renderPass.camera = cam;
+  topControls.enabled = two;
+  controls.enabled = !two && camMode === 'ORBIT';
+  if (!two && camMode === 'FOLLOW') lookTarget.copy(controls.target);
+  scene.fog = two ? null : FOG3D;                   // desde arriba la niebla solo oscurecería el suelo
+  if (two) {                                        // entra centrado donde miraba la cámara 3D
+    const t = controls.target;
+    topControls.target.set(t.x, 0, t.z); topCam.position.set(t.x, 700, t.z + 0.01); topControls.update();
+  }
+  frameCamera(); updateUrl(); syncCtrl();
+  if (!quiet) log('sys', `CAMERA: ${two ? 'top-down 2D tactical view · north up · drag to pan, wheel to zoom' : '3D perspective view'}`);
+}
+// cámara fija: sin auto-rotación ni seguimiento del enjambre (se pueden ajustar por separado)
+function setCamAuto(rotate, follow, quiet) {
+  ROTATE = rotate; FOLLOW = follow; controls.autoRotate = ROTATE;
+  updateUrl(); syncCtrl();
+  if (!quiet) log('sys', `CAMERA: auto-rotate ${ROTATE ? 'ON' : 'OFF'} · follow swarm ${FOLLOW ? 'ON' : 'OFF'}${!ROTATE && !FOLLOW ? ' · view locked' : ''}`);
+}
+const toggleStill = () => (ROTATE || FOLLOW) ? setCamAuto(false, false) : setCamAuto(true, true);
 // Botones en pantalla (táctil / móvil)
 function syncCtrl() {
   document.querySelectorAll('#ctrl [data-mode]').forEach(b => b.classList.toggle('on', b.dataset.mode === mode));
   $('#bCam').classList.toggle('on', camMode === 'FOLLOW');
+  $('#b2d').classList.toggle('on', VIEW === '2D');
+  $('#bStill').classList.toggle('on', !ROTATE && !FOLLOW);
   $('#bHud').classList.toggle('on', !document.body.classList.contains('min'));
 }
 document.querySelectorAll('#ctrl [data-mode]').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode, 'operator command')));
 $('#bCam').addEventListener('click', toggleCam);
+$('#b2d').addEventListener('click', () => setView(VIEW === '2D' ? '3D' : '2D'));
+$('#bStill').addEventListener('click', toggleStill);
 $('#bHud').addEventListener('click', () => { document.body.classList.toggle('min'); syncCtrl(); frameCamera(); });
 function setAuto(v) { auto = v; $('#auto').classList.toggle('off', !auto); log('sys', `AUTO-TASKING ${auto ? 'ENABLED' : 'DISABLED'}`); modeTimer = 0; }
 addEventListener('keydown', e => {
@@ -923,6 +1205,8 @@ addEventListener('keydown', e => {
   else if (k === 'h') document.body.classList.toggle('nohud');
   else if (k === 'f') { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(); }
   else if (k === 'c') toggleCam();
+  else if (k === 'v') setView(VIEW === '2D' ? '3D' : '2D');
+  else if (k === 'r') toggleStill();
 });
 setTimeout(() => { $('#hint').style.opacity = 0.25; }, 15000);
 
@@ -965,6 +1249,10 @@ function updateUrl() {
     u.searchParams.set('drones', N);
     u.searchParams.set('name', PROJECT);
     if (QUALITY === 'low') u.searchParams.set('quality', 'low'); else u.searchParams.delete('quality');
+    if (VIEW === '2D') u.searchParams.set('view', '2d'); else u.searchParams.delete('view');
+    u.searchParams.delete('still');
+    if (!ROTATE) u.searchParams.set('rotate', '0'); else u.searchParams.delete('rotate');
+    if (!FOLLOW) u.searchParams.set('follow', '0'); else u.searchParams.delete('follow');
     history.replaceState(null, '', u);
   } catch (e) { /* file:// puede bloquear replaceState */ }
 }
@@ -991,6 +1279,7 @@ function setQuality(q) {
   renderer.setPixelRatio(q === 'low' ? 1 : Math.min(devicePixelRatio, 2));
   composer.setPixelRatio(renderer.getPixelRatio());
   bloom.enabled = q !== 'low';
+  VOX_GAIN.value = q === 'low' ? 1.7 : 1;
   onResize(); updateUrl();
   log('ok', `RENDER: quality ${q} · pixel ratio ${renderer.getPixelRatio()} · bloom ${bloom.enabled ? 'on' : 'off'}`);
 }
@@ -1005,9 +1294,12 @@ function runCmd(raw) {
       [
         'drones=N · tamaño del enjambre (1-150), p.ej. drones=40',
         'mode=patrol|orbit|formation|scan · cambiar misión',
+        `orbit=${orbitTargets.map(l => l.code.toLowerCase()).join('|')} · orbitar un edificio (${orbitTargets.map(l => l.code + ' ' + l.name).join(', ')})`,
         'quality=low|high · low = resolución 1x y sin bloom (más FPS)',
         'name=TEXTO · nombre del proyecto',
         'auto=on|off · rotación automática de modos',
+        'view=2d|3d · vista cenital 2D (norte arriba) o perspectiva 3D  [V]',
+        'still=on|off · cámara fija: sin giro ni seguimiento  [R] · rotate=on|off · follow=on|off por separado',
         'status · clear · help',
         '[Enter] o [/] abre la terminal · [Esc] sale · [↑/↓] historial',
       ].forEach(l => log('info', l));
@@ -1024,6 +1316,20 @@ function runCmd(raw) {
       else log('err', `unknown mode '${esc(argRaw)}' · options: ${MODES.join(', ').toLowerCase()}`);
       break;
     }
+    case 'orbit': case 'target': {
+      const q = arg.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const find = l => l.code.toLowerCase() === q || l.id === q || l.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(q);
+      const l = q && landmarks.find(find);
+      if (!q) log('info', `TARGETS: ${landmarks.map(l => `${l.code} ${l.name}${l.nfz ? ' [NFZ]' : ''}`).join(' · ')}`);
+      else if (!l) log('err', `unknown target '${esc(argRaw)}' · options: ${orbitTargets.map(l => l.code.toLowerCase()).join(', ')}`);
+      else if (l.nfz) log('err', `DENIED: ${l.name} is inside ${obstacles[0].name} · no-fly zone`);
+      else {
+        orbitLandmark(l); orbitFromClick = true; lastInteraction = T;
+        if (mode === 'ORBIT') { log('sys', `OPERATOR: orbit target moved → ${l.name}`); orbitFromClick = false; modeTimer = 0; lastAssign = -99; }
+        else setMode('ORBIT', `operator target ${l.name}`);
+      }
+      break;
+    }
     case 'quality':
       if (arg === 'low' || arg === 'high') setQuality(arg);
       else log('info', `RENDER: quality ${QUALITY} · usage quality=low|high`);
@@ -1036,13 +1342,26 @@ function runCmd(raw) {
       updatePrompt(); updateUrl();
       log('ok', `project renamed → ${esc(PROJECT)}`);
       break;
+    case 'view':
+      if (arg === '2d' || arg === '3d') setView(arg.toUpperCase());
+      else log('info', `CAMERA: view ${VIEW} · usage view=2d|3d`);
+      break;
+    case 'still':
+      if (arg === 'on' || arg === 'off') setCamAuto(arg === 'off', arg === 'off');
+      else log('info', `CAMERA: still ${!ROTATE && !FOLLOW ? 'on' : 'off'} · usage still=on|off`);
+      break;
+    case 'rotate': case 'follow': {
+      if (arg !== 'on' && arg !== 'off') { log('info', `CAMERA: ${cmd} ${(cmd === 'rotate' ? ROTATE : FOLLOW) ? 'on' : 'off'} · usage ${cmd}=on|off`); break; }
+      if (cmd === 'rotate') setCamAuto(arg === 'on', FOLLOW); else setCamAuto(ROTATE, arg === 'on');
+      break;
+    }
     case 'auto':
       if (arg === 'on' || arg === 'off') setAuto(arg === 'on');
       else log('info', `auto-tasking ${auto ? 'on' : 'off'} · usage auto=on|off`);
       break;
     case 'status': {
       const c = s => drones.filter(d => d.state === s).length;
-      log('info', `STATUS: ${N} airframes · ${c('ACTIVE')} active · ${c('RTB') + c('LANDING')} rtb · ${c('CHARGING')} charging · mode ${mode} · quality ${QUALITY} · ${$('#fps').textContent}`);
+      log('info', `STATUS: ${N} airframes · ${c('ACTIVE')} active · ${c('RTB') + c('LANDING')} rtb · ${c('CHARGING')} charging · mode ${mode} · view ${VIEW}${!ROTATE && !FOLLOW ? ' (still)' : ''} · quality ${QUALITY} · ${$('#fps').textContent}`);
       break;
     }
     case 'clear':
@@ -1063,14 +1382,36 @@ function fitCanvas(c) {
 let mapC, horC, chartC;
 function fitAll() { mapC = fitCanvas($('#map')); horC = fitCanvas($('#horizon')); chartC = fitCanvas($('#chart')); }
 
+// static background of the tactical map: OSM land cover + building heights + Calatrava footprints
+const mapBg = (() => {
+  const P = 400, cv = document.createElement('canvas'); cv.width = cv.height = P;
+  const ctx = cv.getContext('2d'), img = ctx.createImageData(P, P), D = img.data;
+  const COV = [[6, 18, 26], [10, 46, 34], [8, 38, 28], [16, 80, 118], [24, 60, 74], [16, 40, 52], [70, 44, 20], [34, 30, 20]];
+  for (let py = 0; py < P; py++) for (let px = 0; px < P; px++) {
+    const X = (px + 0.5) / P * 2 * AREA - AREA, Z = (py + 0.5) / P * 2 * AREA - AREA;
+    const [gu, gv] = sceneToGrid(X, Z), i = Math.floor((gu + GHALF) / GC), j = Math.floor((gv + GHALF) / GC), o = (py * P + px) * 4;
+    let c = COV[0];
+    if (i >= 0 && j >= 0 && i < GN && j < GN) {
+      const k = j * GN + i, h = CITY_H[k];
+      if (CACM[k]) c = [70, 200, 235];
+      else if (h) { const f = Math.min(1, h / 80); c = [30 + f * 40, 70 + f * 70, 90 + f * 80]; }
+      else c = COV[CITY_C[k]] || COV[0];
+    }
+    D[o] = c[0]; D[o + 1] = c[1]; D[o + 2] = c[2]; D[o + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  return cv;
+})();
+
 function drawMap() {
   const { ctx, w, h } = mapC; if (w < 2) return;
-  const S = w / 400, X = x => (x + 200) * S, Y = z => (z + 200) * S;
+  const S = w / (2 * AREA), X = x => (x + AREA) * S, Y = z => (z + AREA) * S;
   ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = 'rgba(2,10,16,.6)'; ctx.fillRect(0, 0, w, h);
-  // grid
-  ctx.strokeStyle = 'rgba(63,240,255,.08)'; ctx.lineWidth = 1; ctx.beginPath();
-  for (let g = -200; g <= 200; g += 50) { ctx.moveTo(X(g), 0); ctx.lineTo(X(g), h); ctx.moveTo(0, Y(g)); ctx.lineTo(w, Y(g)); }
+  ctx.globalAlpha = 0.85; ctx.drawImage(mapBg, 0, 0, w, w); ctx.globalAlpha = 1;
+  ctx.fillStyle = 'rgba(2,10,16,.25)'; ctx.fillRect(0, 0, w, h);
+  // grid (100 m)
+  ctx.strokeStyle = 'rgba(63,240,255,.07)'; ctx.lineWidth = 1; ctx.beginPath();
+  for (let g = -AREA + (AREA % 50); g <= AREA; g += 50) { ctx.moveTo(X(g), 0); ctx.lineTo(X(g), h); ctx.moveTo(0, Y(g)); ctx.lineTo(w, Y(g)); }
   ctx.stroke();
   // coverage
   const cw = w / CG;
@@ -1079,17 +1420,17 @@ function drawMap() {
     ctx.fillStyle = `rgba(77,255,154,${0.16 * (1 - age / 90)})`;
     ctx.fillRect((i % CG) * cw, Math.floor(i / CG) * cw, cw - 0.5, cw - 0.5);
   }
-  // obstacles
+  // landmarks
+  ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(160,240,255,.85)';
+  for (const l of landmarks) if (!l.nfz) ctx.fillText(l.code, X(l.x) - 7, Y(l.z) + (l.id === 'assut' ? -6 : 3));
+  // RTK reference station (the pin)
+  ctx.fillStyle = '#4dff9a'; ctx.beginPath(); const rx = X(rtk.x), ry = Y(rtk.z);
+  ctx.moveTo(rx, ry - 3.5); ctx.lineTo(rx + 3, ry); ctx.lineTo(rx, ry + 3.5); ctx.lineTo(rx - 3, ry); ctx.fill();
+  // no-fly zones
   for (const o of obstacles) {
-    if (o.type === 'BLD') {
-      ctx.fillStyle = 'rgba(43,212,255,.14)'; ctx.strokeStyle = 'rgba(43,212,255,.6)';
-      ctx.fillRect(X(o.x - o.w / 2), Y(o.z - o.d / 2), o.w * S, o.d * S);
-      ctx.strokeRect(X(o.x - o.w / 2), Y(o.z - o.d / 2), o.w * S, o.d * S);
-    } else {
-      ctx.fillStyle = 'rgba(255,77,94,.1)'; ctx.strokeStyle = 'rgba(255,77,94,.8)';
-      ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.arc(X(o.x), Y(o.z), o.r * S, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
-      ctx.fillStyle = '#ff4d5e'; ctx.font = '9px monospace'; ctx.fillText(o.name, X(o.x) - 14, Y(o.z) + 3);
-    }
+    ctx.fillStyle = 'rgba(255,77,94,.12)'; ctx.strokeStyle = 'rgba(255,77,94,.85)';
+    ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.arc(X(o.x), Y(o.z), o.r * S, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = '#ff4d5e'; ctx.font = '9px monospace'; ctx.fillText(o.name, X(o.x) - 14, Y(o.z) + 3);
   }
   // base
   ctx.strokeStyle = 'rgba(77,255,154,.9)'; ctx.beginPath(); ctx.arc(X(0), Y(0), BASE_R * S, 0, Math.PI * 2); ctx.stroke();
@@ -1112,10 +1453,10 @@ function drawMap() {
     });
   } else if (mode === 'ORBIT') {
     ctx.strokeStyle = 'rgba(255,159,51,.8)';
-    for (const R of [36, 50, 64]) { ctx.beginPath(); ctx.arc(X(orbitCenter.x), Y(orbitCenter.z), R * S, 0, Math.PI * 2); ctx.stroke(); }
+    for (const R of [0, 14, 28]) { ctx.beginPath(); ctx.arc(X(orbitCenter.x), Y(orbitCenter.z), (orbitR0 + R) * S, 0, Math.PI * 2); ctx.stroke(); }
   } else if (mode === 'SCAN') {
     ctx.strokeStyle = 'rgba(77,255,154,.9)'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(X(-170), Y(sweepZ)); ctx.lineTo(X(170), Y(sweepZ)); ctx.stroke(); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(X(-AREA + 10), Y(sweepZ)); ctx.lineTo(X(AREA - 10), Y(sweepZ)); ctx.stroke(); ctx.lineWidth = 1;
   } else if (mode === 'FORMATION') {
     ctx.fillStyle = '#b58cff'; ctx.beginPath(); ctx.arc(X(leader.x), Y(leader.z), 4, 0, Math.PI * 2); ctx.fill();
   }
@@ -1126,9 +1467,17 @@ function drawMap() {
   }
   ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.arc(X(focus.pos.x), Y(focus.pos.z), 6 + Math.sin(T * 6) * 1.5, 0, Math.PI * 2); ctx.stroke();
   // camera
-  ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.beginPath(); ctx.arc(X(clamp(camera.position.x, -200, 200)), Y(clamp(camera.position.z, -200, 200)), 2.5, 0, Math.PI * 2); ctx.fill();
+  if (VIEW === '2D') {
+    const t = topControls.target, vw = view2d.w / topCam.zoom, vh = view2d.h / topCam.zoom;
+    ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.setLineDash([2, 3]);
+    ctx.strokeRect(X(t.x - vw / 2), Y(t.z - vh / 2), vw * S, vh * S); ctx.setLineDash([]);
+  } else {
+    ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.beginPath(); ctx.arc(X(clamp(camera.position.x, -AREA, AREA)), Y(clamp(camera.position.z, -AREA, AREA)), 2.5, 0, Math.PI * 2); ctx.fill();
+  }
   ctx.fillStyle = 'rgba(63,240,255,.8)'; ctx.font = '9px monospace';
   ctx.fillText('N', w / 2 - 3, 10);
+  ctx.fillStyle = 'rgba(160,200,215,.55)'; ctx.font = '7px monospace';
+  ctx.fillText('© OpenStreetMap', w - 66, h - 3);
 }
 
 function drawHorizon() {
@@ -1159,7 +1508,7 @@ function drawHorizon() {
 const CH = 140, series = { thr: [], alt: [], lat: [] };
 function pushChart(active) {
   const thr = 40 + active.length * 1.4 + Math.sin(T * 0.8) * 8 + rand(-5, 5);
-  const alt = active.length ? active.reduce((s, d) => s + d.pos.y, 0) / active.length : 0;
+  const alt = active.length ? active.reduce((s, d) => s + d.pos.y, 0) / active.length * M_PER_U : 0;
   const lat = 18 + Math.sin(T * 0.3) * 4 + rand(0, 6) + (Math.random() < 0.04 ? rand(15, 35) : 0);
   for (const [k, v] of [['thr', thr], ['alt', alt], ['lat', lat]]) { series[k].push(v); if (series[k].length > CH) series[k].shift(); }
 }
@@ -1170,7 +1519,7 @@ function drawChart() {
   for (let i = 1; i < 4; i++) { ctx.moveTo(0, h * i / 4); ctx.lineTo(w, h * i / 4); }
   for (let i = 1; i < 6; i++) { ctx.moveTo(w * i / 6, 0); ctx.lineTo(w * i / 6, h); }
   ctx.stroke();
-  const def = [['thr', '#3ff0ff', 0, 160, 'Mbps'], ['alt', '#4dff9a', 0, 90, 'm'], ['lat', '#ffcc33', 0, 70, 'ms']];
+  const def = [['thr', '#3ff0ff', 0, 160, 'Mbps'], ['alt', '#4dff9a', 0, 180, 'm'], ['lat', '#ffcc33', 0, 70, 'ms']];
   ctx.font = '10px monospace';
   def.forEach(([k, col, mn, mx, u], j) => {
     const s = series[k]; if (s.length < 2) return;
@@ -1204,24 +1553,39 @@ function updateHud(active) {
     c.bar.style.width = d.battery.toFixed(0) + '%';
     c.st.textContent = STATE_SHORT[d.state];
   });
-  const d = focus, lat = LAT0 - d.pos.z / 111320, lon = LON0 + d.pos.x / (111320 * Math.cos(LAT0 * Math.PI / 180));
+  const d = focus, [lat, lon] = sceneToGeo(d.pos.x, d.pos.z), altM = d.pos.y * M_PER_U, spdM = d.vel.length() * M_PER_U;
   $('#fid').textContent = d.id;
   $('#fpvId').textContent = `${d.id} · CAM0`;
   const rows = [
-    ['STATE', d.state], ['ALT', d.pos.y.toFixed(1) + ' m'], ['SPD', d.vel.length().toFixed(1) + ' m/s'],
+    ['STATE', d.state], ['ALT', altM.toFixed(1) + ' m'], ['SPD', spdM.toFixed(1) + ' m/s'],
     ['HDG', hdgOf(d) + '°'], ['BAT', d.battery.toFixed(1) + ' %'], ['LINK', d.link.toFixed(1) + ' %'],
     ['RPM', Math.round(4200 + d.vel.length() * 180 + Math.sin(T * 9) * 60)], ['ESC', d.temp.toFixed(1) + ' °C'],
     ['LAT', lat.toFixed(5)], ['LON', lon.toFixed(5)],
   ];
   $('#fvals').innerHTML = rows.map(([k, v]) => `<span class="k">${k}</span><span class="v">${v}</span>`).join('');
-  $('#fpvL').textContent = `ALT ${d.pos.y.toFixed(0)}m  SPD ${d.vel.length().toFixed(1)}`;
+  $('#fpvL').textContent = `ALT ${altM.toFixed(0)}m  SPD ${spdM.toFixed(1)}`;
   $('#fpvR').textContent = `${lat.toFixed(4)} ${lon.toFixed(4)}`;
-  $('#mapInfo').textContent = `COV ${coveragePct().toFixed(0)}% · R 400m`;
+  $('#mapInfo').textContent = `COV ${coveragePct().toFixed(0)}% · R ${(AREA * M_PER_U).toFixed(0)}m`;
 }
 
 // ================= CAMERA / FPV =================
 const tagEl = $('#tag3d'), _p = V3();
 function updateCamera(dt) {
+  if (VIEW === '2D') {
+    // 2D: se desplaza el mapa (objetivo y cámara a la vez) hacia el drone seguido o el centroide del enjambre
+    let k = 0;
+    if (camMode === 'FOLLOW') { _p.copy(focus.pos); k = 1 - Math.exp(-dt * 3); }
+    else if (FOLLOW && T - lastInteraction > 8) {
+      const act = drones.filter(d => d.state === 'ACTIVE');
+      if (act.length) { _p.set(0, 0, 0); act.forEach(d => _p.add(d.pos)); _p.divideScalar(act.length).multiplyScalar(0.5); k = 1 - Math.exp(-dt * 0.3); }
+    }
+    if (k) {
+      const t = topControls.target, mx = (_p.x - t.x) * k, mz = (_p.z - t.z) * k;
+      t.x += mx; t.z += mz; topCam.position.x += mx; topCam.position.z += mz;
+    }
+    topControls.update();
+    return;
+  }
   if (camMode === 'FOLLOW') {
     const d = focus, fx = Math.sin(d.yaw), fz = Math.cos(d.yaw);
     _p.set(d.pos.x - fx * 24, d.pos.y + 9, d.pos.z - fz * 24);
@@ -1229,8 +1593,8 @@ function updateCamera(dt) {
     lookTarget.lerp(d.pos, 1 - Math.exp(-dt * 5));
     camera.lookAt(lookTarget);
   } else {
-    // drift orbit target toward swarm centroid when idle
-    if (T - lastInteraction > 8) {
+    // drift orbit target toward swarm centroid when idle (salvo cámara fija / follow=off)
+    if (FOLLOW && T - lastInteraction > 8) {
       const act = drones.filter(d => d.state === 'ACTIVE');
       if (act.length) {
         _p.set(0, 0, 0); act.forEach(d => _p.add(d.pos)); _p.divideScalar(act.length);
@@ -1266,9 +1630,8 @@ let hudT = 0, chartT = 0, chatT = 1.5;
 genRoute();
 $('#mode').textContent = mode;
 
-function frame() {
-  requestAnimationFrame(frame);
-  const dt = Math.min(clock.getDelta(), 0.05);
+// simulation step (no rendering) → also used by __swarm.warp() in headless tests
+function simStep(dt) {
   T += dt;
 
   // --- simulation ---
@@ -1292,7 +1655,7 @@ function frame() {
       wpIdx++;
       if (wpIdx >= waypoints.length) {
         genRoute();
-        log('info', `PLANNER: new patrol route generated · ${waypoints.length} WPs · ${(waypoints.reduce((s, w, i) => s + w.distanceTo(waypoints[(i + 1) % waypoints.length]), 0) / 1000).toFixed(2)} km`);
+        log('info', `PLANNER: new patrol route generated · ${waypoints.length} WPs · ${(waypoints.reduce((s, w, i) => s + w.distanceTo(waypoints[(i + 1) % waypoints.length]), 0) * M_PER_U / 1000).toFixed(2)} km`);
       }
     }
   }
@@ -1305,6 +1668,19 @@ function frame() {
   }
   chatT -= dt;
   if (chatT <= 0) { chatter(); chatT = rand(0.35, 1.3); }
+  for (let i = revealing.length - 1; i >= 0; i--) {
+    const r = revealing[i], t0 = r.t; r.t += dt;
+    if (t0 < 0 && r.t >= 0 && r.onStart) r.onStart();
+    if (r.t >= r.dur) { r.u.value = 1e4; revealing.splice(i, 1); }
+    else r.u.value = r.t < 0 ? -1 : r.top * (1 - Math.pow(1 - r.t / r.dur, 2));
+  }
+  return active;
+}
+
+function frame() {
+  requestAnimationFrame(frame);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const active = simStep(dt);
 
   // --- visuals ---
   routeGroup.visible = mode === 'PATROL';
@@ -1318,6 +1694,8 @@ function frame() {
   scanBand.position.z = sweepZ;
   scanWall.position.set(0, 35, sweepZ);
   beacons.forEach(b => b.material.opacity = Math.sin(T * 3 + b.userData.ph) > 0.6 ? 1 : 0.15);
+  rtk.dish.rotation.y = T * 1.5;
+  orbitMarker.scale.set(orbitR0 / 36, 1, orbitR0 / 36);
   for (let i = ripples.length - 1; i >= 0; i--) {
     const r = ripples[i]; r.t += dt;
     r.m.scale.setScalar(1 + r.t * 25); r.m.material.opacity = Math.max(0, 1 - r.t / 1.4);
@@ -1327,10 +1705,10 @@ function frame() {
   // focus visuals
   const f = focus;
   focusRing.position.copy(f.pos);
-  focusRing.quaternion.copy(camera.quaternion);
+  focusRing.quaternion.copy(cam.quaternion);
   focusRing.rotateZ(T * 1.5);
   focusRing.scale.setScalar(1 + Math.sin(T * 5) * 0.08);
-  const gy = hgt(f.pos.x, f.pos.z), ch = Math.max(0.1, f.pos.y - gy), cr = ch * 0.35;
+  const gy = topAt(f.pos.x, f.pos.z), ch = Math.max(0.1, f.pos.y - gy), cr = ch * 0.35;
   focusCone.position.copy(f.pos); focusCone.scale.set(cr, ch, cr);
   footRing.position.set(f.pos.x, gy + 0.25, f.pos.z); footRing.scale.setScalar(cr);
   if (bannerTimer > 0) { bannerTimer -= dt; if (bannerTimer <= 0) bannerEl.classList.remove('show'); }
@@ -1338,12 +1716,12 @@ function frame() {
   updateCamera(dt);
 
   // floating tag
-  _p.copy(f.pos).project(camera);
+  _p.copy(f.pos).project(cam);
   if (_p.z < 1 && Math.abs(_p.x) < 1 && Math.abs(_p.y) < 1) {
     tagEl.style.display = 'block';
     tagEl.style.left = ((_p.x + 1) / 2 * innerWidth + 20) + 'px';
     tagEl.style.top = ((1 - _p.y) / 2 * innerHeight - 30) + 'px';
-    tagEl.textContent = `${f.id} ▸ ${f.state}\nALT ${f.pos.y.toFixed(1)}m  SPD ${f.vel.length().toFixed(1)}m/s\nBAT ${f.battery.toFixed(0)}%  LNK ${f.link.toFixed(0)}%`;
+    tagEl.textContent = `${f.id} ▸ ${f.state}\nALT ${(f.pos.y * M_PER_U).toFixed(1)}m  SPD ${(f.vel.length() * M_PER_U).toFixed(1)}m/s\nBAT ${f.battery.toFixed(0)}%  LNK ${f.link.toFixed(0)}%`;
   } else tagEl.style.display = 'none';
 
   composer.render();
@@ -1362,6 +1740,7 @@ function frame() {
 // Encuadre: centra la proyección en la zona libre (#center) y ajusta el FOV a su ancho,
 // para que la escena no quede tapada por los paneles en monitores verticales o móviles.
 const BASE_DIST = camera.position.distanceTo(controls.target);
+const view2d = { w: 0, h: 0 };                      // tamaño (mundo) de la zona visible en 2D, para el minimapa
 const MAX_T = Math.tan(THREE.MathUtils.degToRad(37));   // FOV vertical máx. 74°
 let layoutKey = '';
 function frameCamera() {
@@ -1370,6 +1749,13 @@ function frameCamera() {
   const r = (hudOff || c.width < 50 || c.height < 50) ? { left: 0, top: 0, width: innerWidth, height: innerHeight } : c;
   const dx = r.left + r.width / 2 - innerWidth / 2, dy = r.top + r.height / 2 - innerHeight / 2;
   const t = 0.6 * innerHeight / Math.max(1, r.width);   // misma cobertura horizontal que en escritorio
+  // 2D: encaja el área de operaciones en la zona libre (el zoom del usuario va aparte, en topCam.zoom)
+  const wpp = Math.max(2 * AREA * 0.95 / Math.max(1, r.width), 2 * AREA * 0.95 / Math.max(1, r.height));
+  topCam.left = -innerWidth / 2 * wpp; topCam.right = innerWidth / 2 * wpp;
+  topCam.top = innerHeight / 2 * wpp; topCam.bottom = -innerHeight / 2 * wpp;
+  topCam.setViewOffset(innerWidth, innerHeight, -dx, -dy, innerWidth, innerHeight);
+  topCam.updateProjectionMatrix();
+  view2d.w = r.width * wpp; view2d.h = r.height * wpp;
   camera.aspect = innerWidth / innerHeight;
   camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.min(t, MAX_T)));
   camera.setViewOffset(innerWidth, innerHeight, -dx, -dy, innerWidth, innerHeight);
@@ -1379,7 +1765,7 @@ function frameCamera() {
   if (key !== layoutKey && camMode === 'ORBIT') {
     layoutKey = key;
     // zona alta y estrecha → cámara más cenital para llenar la vista con la ciudad en vez de cielo
-    const elev = THREE.MathUtils.degToRad(THREE.MathUtils.clamp(20 + (r.height / r.width - 0.6) * 40, 20, 45));
+    const elev = THREE.MathUtils.degToRad(THREE.MathUtils.clamp(26 + (r.height / r.width - 0.6) * 40, 26, 50));
     const sph = new THREE.Spherical().setFromVector3(camera.position.clone().sub(controls.target));
     sph.radius = BASE_DIST * Math.max(1, t / MAX_T);
     sph.phi = Math.PI / 2 - elev;
@@ -1399,8 +1785,12 @@ const canvasRO = new ResizeObserver(() => fitAll());
 ['#map', '#horizon', '#chart'].forEach(s => canvasRO.observe($(s)));
 fitAll();
 frameCamera();
+if (VIEW === '2D') setView('2D', true);
 syncCtrl();
 frame();
+// debug / tests
+window.__swarm = { drones: () => drones, landmarks, obstacles, topAt, sceneToGeo, setMode, runCmd, camera, controls, topCam, topControls, setView, setCamAuto, cacVoxels, cityMesh, cacMeshes, scene, gridGroup,
+  warp(sec) { for (let t = 0; t < sec; t += 0.05) simStep(0.05); } };
 </script>
 </body>
 </html>
