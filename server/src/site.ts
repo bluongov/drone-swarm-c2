@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
 import { endianness } from 'node:os';
 import { makeFrames, makeTerrain } from '../../sim-core.js';
+import { DEFAULT_SITE, SITES } from '../../sites.js';
 import type { Db } from './db.ts';
 
 export interface City {
@@ -10,10 +11,15 @@ export interface City {
   cover?: unknown; h?: string; c?: string; [k: string]: unknown;
 }
 export interface Landmark { id: string; code?: string; name?: string; x: number; z: number; r: number; h: number; nfz?: boolean; [k: string]: unknown }
+export interface SiteReg {
+  id: string; name: string; short: string; city: string; shapes: string; shapesGlobal: string;
+  baseB: number[]; nfz: Record<string, { r: number; h: number; label: string }>; [k: string]: unknown;
+}
 export type Source = 'db' | 'file' | 'zeros' | 'none';
 export interface Site {
   id: string;
   name: string;
+  reg: SiteReg;                    // sites.js entry (short, baseB, shapesGlobal, nfz...)
   city: City;
   cityJson: string;                // pre-serialised CITY-compatible JSON
   hm: Float32Array;
@@ -32,11 +38,25 @@ async function readText(rel: string): Promise<string | null> {
   try { return await readFile(new URL(rel, ROOT), 'utf8'); } catch { return null; }
 }
 
-async function cityFromFile(): Promise<City | null> {
-  const txt = await readText('assets/valencia-city.js');
+// registry entry of a site id; ids that are not in sites.js (test sites) borrow the default site's files, as before
+export const regFor = (id: string): SiteReg => (SITES as unknown as Record<string, SiteReg>)[id] ?? (SITES as unknown as Record<string, SiteReg>)[DEFAULT_SITE];
+
+// assets/<x>-city.js: `window.CITY = {...};` -> the JSON object literal (also used by server/db/load-site.ts)
+export async function cityFromFile(reg: SiteReg): Promise<City | null> {
+  const txt = await readText(reg.city);
   const m = txt && /window\.CITY\s*=\s*(\{[\s\S]*\})\s*;?\s*$/.exec(txt.trim());
   if (!m) return null;
   try { return JSON.parse(m[1]); } catch { return null; }
+}
+
+// tools/.cache/site-export-<id>.json (tools/export-site.mjs); the legacy tools/.cache/site-export.json is the Ciutat only
+export const exportFiles = (id: string): string[] => [`tools/.cache/site-export-${id}.json`, ...(id === 'cac' ? ['tools/.cache/site-export.json'] : [])];
+export async function readExport(id: string): Promise<any | null> {
+  for (const f of exportFiles(id)) {
+    const txt = await readText(f);
+    if (txt) { try { return JSON.parse(txt); } catch { /* try the next file */ } }
+  }
+  return null;
 }
 
 function decodeFloat32(buf: Buffer, n: number): Float32Array | null {
@@ -49,12 +69,11 @@ function decodeFloat32(buf: Buffer, n: number): Float32Array | null {
 }
 
 // tools/.cache/site-export.json (WP1): tolerant of key names, height map as base64 (gzip or raw) or number array
-async function exportFromFile(n: number): Promise<{ hm: Float32Array | null; landmarks: Landmark[] | null }> {
-  const txt = await readText('tools/.cache/site-export.json');
-  if (!txt) return { hm: null, landmarks: null };
+async function exportFromFile(id: string, n: number): Promise<{ hm: Float32Array | null; landmarks: Landmark[] | null }> {
   try {
-    const j = JSON.parse(txt);
-    const raw = j.heightMap ?? j.height_map ?? j.hm ?? j.topAt ?? j.heights;
+    const j = await readExport(id);
+    if (!j) return { hm: null, landmarks: null };
+    const raw = j.hm_gzip_b64 ?? j.heightMap ?? j.height_map ?? j.hm ?? j.topAt ?? j.heights;
     let hm: Float32Array | null = null;
     if (typeof raw === 'string') hm = decodeFloat32(Buffer.from(raw, 'base64'), n);
     else if (Array.isArray(raw) && raw.length === n * n) hm = Float32Array.from(raw);
@@ -66,7 +85,8 @@ async function exportFromFile(n: number): Promise<{ hm: Float32Array | null; lan
 export async function loadSite(id: string, db: Db | null, allowFallback = true): Promise<Site | null> {
   const warnings: string[] = [];
   const sources: Site['sources'] = { site: 'none', city: 'none', heightMap: 'none', landmarks: 'none', cacJs: 'none', nfz: 'none' };
-  let name = id, city: City | null = null, hm: Float32Array | null = null, landmarks: Landmark[] | null = null;
+  const reg = regFor(id);
+  let name = reg.id === id ? reg.name : id, city: City | null = null, hm: Float32Array | null = null, landmarks: Landmark[] | null = null;
   let cacJs: string | null = null, features: any[] | null = null, dbSite = false;
 
   if (db) {
@@ -106,27 +126,27 @@ export async function loadSite(id: string, db: Db | null, allowFallback = true):
   if (!dbSite && !allowFallback) return null;
 
   if (!city) {
-    city = await cityFromFile();
-    if (!city) { warnings.push('no CITY (db or assets/valencia-city.js)'); return null; }
+    city = await cityFromFile(reg);
+    if (!city) { warnings.push(`no CITY (db or ${reg.city})`); return null; }
     sources.city = 'file';
   }
   const n = city.n;
   if (!hm || !landmarks) {
-    const ex = await exportFromFile(n);
+    const ex = await exportFromFile(id, n);
     if (!hm && ex.hm) { hm = ex.hm; sources.heightMap = 'file'; }
     if (!landmarks && ex.landmarks) { landmarks = ex.landmarks; sources.landmarks = 'file'; }
   }
   if (!hm) { hm = new Float32Array(n * n); sources.heightMap = 'zeros'; warnings.push('height map missing: using zeros (flat terrain)'); }
   if (!landmarks) { landmarks = []; warnings.push('landmarks missing: none loaded'); }
   if (!cacJs) {
-    cacJs = await readText('cac-shapes.js');
+    cacJs = await readText(reg.shapes);
     if (cacJs) sources.cacJs = 'file';
   }
 
   const frames = makeFrames(city);
   const terrain = makeTerrain(city, hm);
   return {
-    id, name, city, cityJson: JSON.stringify(city), hm, landmarks,
+    id, name, reg, city, cityJson: JSON.stringify(city), hm, landmarks,
     nfz: { type: 'FeatureCollection', features: features ?? [] },
     cacJs, frames, terrain, sources, warnings,
   };

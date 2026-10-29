@@ -295,8 +295,6 @@ body.min #hud > :not(#top):not(#center), body.min .col > *{display:none}
   </section>
 </div>
 
-<script src="cac-shapes.js"></script>
-<script src="assets/valencia-city.js"></script>
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
@@ -314,6 +312,8 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 // simulation core (shared with the server): drones, swarms, flocking, NFZ list, intercepts
 import { AREA, MAXS, MODES, MODE_W, SC, M_PER_U, R_NEI, BASE_B, V3, clamp, lerpAngle, SimWorld, SimDrone, SimSwarm } from './sim-core.js';
+// sites: map + building formulas per place (?site=cac|levante)
+import { SITES, DEFAULT_SITE } from './sites.js';
 
 // ================= CONFIG =================
 const params = new URLSearchParams(location.search);
@@ -336,6 +336,8 @@ let SWEEP = params.has('sweep') ? Math.min(180, Math.max(0, parseFloat(params.ge
 const SEED = params.has('seed') && Number.isFinite(parseInt(params.get('seed'))) ? parseInt(params.get('seed')) : null;
 // server=ws://host:port → server mode: the server owns the simulation, this page renders it (see SERVER MODE below). Without it: offline sim.
 const SERVER_PARAM = params.get('server');
+const SITE_PARAM = (params.get('site') || '').toLowerCase();
+let SITE_ID = SITES[SITE_PARAM] ? SITE_PARAM : DEFAULT_SITE;          // server mode: the server's site wins (hello.site.id)
 const STATE_COLOR = { ACTIVE: 0x3ff0ff, RTB: 0xffcc33, LANDING: 0xffcc33, CHARGING: 0x4dff9a, LAUNCH: 0xffffff, IDLE: 0x557788 };
 const STATE_SHORT = { ACTIVE: 'ACT', RTB: 'RTB', LANDING: 'LND', CHARGING: 'CHG', LAUNCH: 'LCH', IDLE: 'IDL' };
 
@@ -413,7 +415,7 @@ function setLink(kind) {                                // 'online' | 'reconnect
   el.className = 'tag' + (kind === 'online' ? '' : kind === 'reconnecting' ? ' warn' : ' off');
 }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-function loadScript(src, ms = 15000) {                  // classic script (sets window.CAC)
+function loadScript(src, ms = 15000) {                  // classic script (CITY raster, building formulas)
   return new Promise((resolve, reject) => {
     const el = document.createElement('script');
     const t = setTimeout(() => { el.remove(); reject(new Error('timeout')); }, ms);
@@ -451,7 +453,12 @@ async function netBootstrap(raw) {
   setLink('reconnecting');
   const hello = await Promise.race([helloP, sleep(5000).then(() => null)]);
   if (!hello) { client.close(); netBoot.push(['warn', `SERVER: no hello from ${esc0(wsUrl)} within 5 s · running the offline simulation`]); return null; }
-  const siteId = (hello.site && hello.site.id) || 'cac', enc = encodeURIComponent(siteId);
+  const siteId = (hello.site && hello.site.id) || DEFAULT_SITE, enc = encodeURIComponent(siteId);
+  if (SITES[siteId]) {
+    if (SITE_PARAM && SITE_PARAM !== siteId) netBoot.push(['warn', `SERVER: the server runs site '${esc0(siteId)}' · ?site=${esc0(SITE_PARAM)} ignored (restart the server with SITE_ID=${esc0(SITE_PARAM)})`]);
+    SITE_ID = siteId;
+  } else { client.close(); netBoot.push(['warn', `SERVER: unknown site '${esc0(siteId)}' (not in sites.js) · running the offline simulation`]); return null; }
+  const G = SITES[siteId].shapesGlobal;
   // map data: CITY (json) and the building formulas (classic script → window.CAC). Each one falls back to the local file on failure.
   const fetchCity = async () => {
     const res = await fetch(`${base}/api/sites/${enc}`, { signal: AbortSignal.timeout(20000) });
@@ -465,13 +472,13 @@ async function netBootstrap(raw) {
   const fetchCac = async () => {
     const host = new URL(base).hostname;
     if (!trustedHost(host)) throw new Error(`formulas not loaded from untrusted host ${host}`);
-    const prev = window.CAC;
-    try { await loadScript(`${base}/api/sites/${enc}/cac.js`); } catch (e) { window.CAC = prev; throw e; }
-    if (!(window.CAC && window.CAC.BUILDINGS && window.CAC.MAT)) { window.CAC = prev; throw new Error('script did not define CAC'); }
+    const prev = window[G];
+    try { await loadScript(`${base}/api/sites/${enc}/cac.js`); } catch (e) { window[G] = prev; throw e; }
+    if (!(window[G] && window[G].BUILDINGS && window[G].MAT)) { window[G] = prev; throw new Error(`script did not define ${G}`); }
   };
   const [rc, rf] = await Promise.allSettled([fetchCity(), fetchCac()]);
-  if (rc.status === 'fulfilled') window.CITY = rc.value; else netBoot.push(['warn', `SERVER: CITY from ${esc0(base)}/api/sites/${esc0(siteId)} unavailable (${esc0(rc.reason && rc.reason.message)}) · using local assets/valencia-city.js`]);
-  if (rf.status === 'rejected') netBoot.push(['warn', `SERVER: formulas ${esc0(siteId)}/cac.js unavailable (${esc0(rf.reason && rf.reason.message)}) · using local cac-shapes.js`]);
+  if (rc.status === 'fulfilled') window.CITY = rc.value; else netBoot.push(['warn', `SERVER: CITY from ${esc0(base)}/api/sites/${esc0(siteId)} unavailable (${esc0(rc.reason && rc.reason.message)}) · using local ${esc0(SITES[siteId].city)}`]);
+  if (rf.status === 'rejected') netBoot.push(['warn', `SERVER: formulas ${esc0(siteId)}/cac.js unavailable (${esc0(rf.reason && rf.reason.message)}) · using local ${esc0(SITES[siteId].shapes)}`]);
   // the first snapshot must be here before the scene is built (focus drone, fleet matrix)
   for (let i = 0; i < 60 && !(client.latest && client.latest.drones.size && client.sample()); i++) await sleep(50);
   if (!(client.latest && client.latest.drones.size)) { client.close(); netBoot.push(['warn', `SERVER: no drones in the first snapshot · running the offline simulation`]); return null; }
@@ -481,18 +488,28 @@ async function netBootstrap(raw) {
 }
 const esc0 = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 if (SERVER_PARAM) { NET = await netBootstrap(SERVER_PARAM); if (!NET) setLink('offline'); }
+if (SITE_PARAM && !SITES[SITE_PARAM]) netBoot.push(['warn', `SITE: unknown ?site=${esc0(SITE_PARAM)} · options: ${Object.keys(SITES).join(', ')} · using ${DEFAULT_SITE}`]);
+const SITE = SITES[SITE_ID];
+// local data files (offline mode, or server-mode fallbacks): CITY raster + building formulas of the selected site
+if (!NET || !NET.cityFromServer) { window.CITY = undefined; await loadScript(SITE.city); }
+if (!NET || !NET.cacFromServer) await loadScript(SITE.shapes);
+if (!window.CITY || !window[SITE.shapesGlobal]) throw new Error(`site ${SITE_ID}: map data failed to load (${SITE.city}, ${SITE.shapes})`);
+// initial camera framing of the site (3D orbit target / position, 2D map centre)
+camera.position.set(...SITE.camera.pos); controls.target.set(...SITE.camera.target); controls.update();
+topControls.target.set(SITE.center2d[0], 0, SITE.center2d[1]); topCam.position.set(SITE.center2d[0], 700, SITE.center2d[1] + 0.01); topControls.update();
 
-// ================= SITE: VALENCIA (Ciutat de les Arts i les Ciències) =================
-// Real place. The Calatrava / Candela buildings are implicit formulas (cac-shapes.js) sampled into cubes;
-// the city around them is OpenStreetMap baked into two rasters (assets/valencia-city.js, tools/osm-city.py).
+// ================= SITE (sites.js: Ciutat de les Arts i les Ciències by default, ?site=levante) =================
+// Real place. The landmark buildings are implicit formulas (SITE.shapes, e.g. cac-shapes.js) sampled into cubes;
+// the city around them is OpenStreetMap baked into two rasters (SITE.city, tools/osm-city.py --site <id>).
 // Frames · site: metres, x east / y north (origin CITY.origin) · grid: site rotated by CITY.theta around the
 // drone base, so every voxel follows the complex · scene: X east, Z south, origin = drone base, 1 unit = 2 m.
-const { BUILDINGS: CAC_B } = window.CAC, CITY = window.CITY;
+const SHAPES = window[SITE.shapesGlobal], CITY = window.CITY;
+const CAC_B = SHAPES.BUILDINGS.filter(b => !SITE.skip.includes(b.id));
 // SC (scene units per metre) and M_PER_U come from sim-core.js
 const TH = CITY.theta * Math.PI / 180, CT = Math.cos(TH), ST = Math.sin(TH);
 const GC = CITY.cell, GN = CITY.n, GHALF = GN * GC / 2;          // OSM raster: GN × GN cells of GC metres
 const [BX, BY] = CITY.base, R_E = 6371008.8, COSLAT = Math.cos(CITY.origin[0] * Math.PI / 180);
-const PIN = [39.457442, -0.355547];                               // RTK reference station (pool in front of the Palau)
+const PIN = SITE.rtk;                                             // RTK reference station (Ciutat: pool in front of the Palau)
 const VOX = SMALL_SCREEN ? 3 : 2;                                 // edge of a Calatrava cube, metres
 const siteToScene = (x, y) => V3((x - BX) * SC, 0, -(y - BY) * SC);
 const geoToSite = (lat, lon) => [(lon - CITY.origin[1]) * Math.PI / 180 * R_E * COSLAT, (lat - CITY.origin[0]) * Math.PI / 180 * R_E];
@@ -616,12 +633,16 @@ const cityMesh = (() => {
 })();
 
 // ---- Calatrava / Candela buildings: formula → cubes on the shared grid (only surface cubes are drawn) ----
-const VCOL = { 1: 0x7fb3c6, 2: 0xd2f1ff, 3: 0x1f7fa6, 4: 0x10202b, 5: 0x2b4fd0, 6: 0x8fa6b8, 7: 0x2f7a46, 8: 0x33424d, 9: 0x5f6a66, 10: 0x6f8494, 11: 0xc8dbe4 };
-const LM_INFO = {
-  palau: ['PAL', 'Palau de les Arts'], hemisferic: ['HMF', "L'Hemisfèric"], museu: ['MUS', 'Museu de les Ciències'],
-  umbracle: ['UMB', "L'Umbracle"], agora: ['AGO', "L'Àgora"], assut: ['AST', "Pont de l'Assut de l'Or"],
-  submari: ['OCE', "L'Oceanogràfic"], acces: ['OCE'], aviari: ['OCE'], artic: ['OCE'],
-};
+// cube colours per material id: the Ciutat has a hand-tuned palette; other sites derive one from their MAT colours
+// (keep the hue, compress lightness, tint towards the HUD cyan) so every site reads the same on the dark scene
+const VCOL = SITE_ID === 'cac' ? { 1: 0x7fb3c6, 2: 0xd2f1ff, 3: 0x1f7fa6, 4: 0x10202b, 5: 0x2b4fd0, 6: 0x8fa6b8, 7: 0x2f7a46, 8: 0x33424d, 9: 0x5f6a66, 10: 0x6f8494, 11: 0xc8dbe4 }
+  : Object.fromEntries((SHAPES.MAT || []).map((m, i) => {
+    if (!m) return [i, 0x7fb3c6];
+    const c = new THREE.Color(m.color), hsl = {}; c.getHSL(hsl);
+    c.setHSL(hsl.h, hsl.s * 0.7, 0.12 + hsl.l * 0.7).lerp(new THREE.Color(0x7fb3c6), 0.25);
+    return [i, c.getHex()];
+  }));
+const LM_INFO = SITE.landmarks;                                   // formula id → [map code, name]
 const landmarks = [];                                             // { id, code, name, x, z, r, h, nfz }
 const cacMeshes = [];
 const cacVoxels = (() => {
@@ -661,7 +682,7 @@ const cacVoxels = (() => {
           !mats[idx - nx] || !mats[idx + nx] || !mats[idx + nxy] || (k > 0 && !mats[idx - nxy])) surf.push(i, j, k, m);
     }
     const n = surf.length / 4; total += n;
-    const nfz = b.id === 'hemisferic';
+    const nfz = !!SITE.nfz[b.id];
     const mesh = new THREE.InstancedMesh(cubeGeo, voxMaterial(new THREE.Vector3(hs, hs, hs), nfz ? 0xff4d5e : 0x3ff0ff, nfz ? 0.55 : 0.42, 0.22), n);
     for (let p = 0; p < n; p++) {
       const i = surf[p * 4], j = surf[p * 4 + 1], k = surf[p * 4 + 2], m = surf[p * 4 + 3];
@@ -673,8 +694,16 @@ const cacVoxels = (() => {
     mesh.computeBoundingSphere();
     mesh.userData = { id: b.id, n };
     gridGroup.add(mesh); cacMeshes.push(mesh);
-    // landmark record (scene coords). Oceanogràfic pavilions are merged into one landmark below.
+    // landmark record (scene coords). Ids sharing a code in SITE.merge (Oceanogràfic pavilions) become one landmark below.
     const c = siteToScene(b.place.x, b.place.y);
+    if (SITE.centroid.includes(b.id) && n) {                     // centre = centroid of the surface cubes (formula placed elsewhere)
+      let sx = 0, sz = 0;
+      for (let p = 0; p < n; p++) {
+        const gu = (i0 + surf[p * 4] + 0.5) * h, gv = (j0 + surf[p * 4 + 1] + 0.5) * h;
+        sx += (gu * CT - gv * ST) * SC; sz += -(gu * ST + gv * CT) * SC;
+      }
+      c.set(sx / n, 0, sz / n);
+    }
     let r = 0;
     for (let p = 0; p < n; p++) {
       const gu = (i0 + surf[p * 4] + 0.5) * h, gv = (j0 + surf[p * 4 + 1] + 0.5) * h;
@@ -683,22 +712,27 @@ const cacVoxels = (() => {
     }
     const [code, name] = LM_INFO[b.id] || [b.id.slice(0, 3).toUpperCase(), b.name];
     const top = (topK + 1) * hs;
-    landmarks.push({ id: b.id, code, name: name || b.name, x: c.x, z: c.z, r: b.id === 'assut' ? 10 : r, h: top, nfz, mesh });
+    const lm = { id: b.id, code, name: name || b.name, x: c.x, z: c.z, r: SITE.radius[b.id] ?? r, h: top, nfz, mesh };
+    if (nfz) Object.assign(lm, { nfzR: SITE.nfz[b.id].r, nfzH: SITE.nfz[b.id].h, nfzLabel: SITE.nfz[b.id].label });
+    if (SITE.orbitAbove.includes(b.id)) lm.orbitAbove = true;
+    if ((SITE.noOrbit || []).includes(b.id)) lm.noOrbit = true;
+    landmarks.push(lm);
     // aircraft-warning light on the highest point
     const tg = (i0 + topI + 0.5) * h, tv = (j0 + topJ + 0.5) * h;
     if (top > 20) addBeacon((tg * CT - tv * ST) * SC, top + 0.9, -(tg * ST + tv * CT) * SC);
   }
-  // one landmark for the four Oceanogràfic pavilions
-  const oce = landmarks.filter(l => l.code === 'OCE');
-  if (oce.length) {
+  // one landmark per merged code (Ciutat: the four Oceanogràfic pavilions → OCE)
+  for (const [code, mg] of Object.entries(SITE.merge)) {
+    const oce = landmarks.filter(l => l.code === code);
+    if (!oce.length) continue;
     const x = oce.reduce((s, l) => s + l.x, 0) / oce.length, z = oce.reduce((s, l) => s + l.z, 0) / oce.length;
     const r = Math.max(...oce.map(l => Math.hypot(l.x - x, l.z - z) + l.r));
     oce.forEach(l => landmarks.splice(landmarks.indexOf(l), 1));
-    landmarks.push({ id: 'oceanografic', code: 'OCE', name: "L'Oceanogràfic", x, z, r, h: Math.max(...oce.map(l => l.h)), nfz: false });
+    landmarks.push({ id: mg.id, code, name: mg.name, x, z, r, h: Math.max(...oce.map(l => l.h)), nfz: false });
   }
   return total;
 })();
-const orbitTargets = landmarks.filter(l => !l.nfz);
+const orbitTargets = landmarks.filter(l => !l.nfz && !l.noOrbit);
 const nearestLandmark = d => landmarks.reduce((a, l) => Math.hypot(l.x - d.pos.x, l.z - d.pos.z) < Math.hypot(a.x - d.pos.x, a.z - d.pos.z) ? l : a);
 
 // boot effect: the city rises, then each Calatrava building is "printed" layer by layer
@@ -709,7 +743,7 @@ cacMeshes.forEach((m, i) => {
     log('ok', `SITE MODEL: ${b.name} · ${m.userData.n.toLocaleString('en-US')} voxels @ ${VOX} m`));
 });
 
-// ---- RTK reference station on the pin (pool in front of the Palau) ----
+// ---- RTK reference station on the pin (SITE.rtk) ----
 const rtk = (() => {
   const p = siteToScene(...geoToSite(...PIN));
   const mat = new THREE.MeshBasicMaterial({ color: 0x4dff9a, transparent: true, opacity: 0.85 });
@@ -953,6 +987,7 @@ class Swarm extends SimSwarm {
 // ---- the simulation world (sim-core.js): drones + swarms + NFZ list + intercepts. index.html only adds meshes and DOM ----
 const world = new SimWorld({
   topAt, topNear, landmarks, seed: SEED, n: NET ? 0 : N, obstacles: NET ? NET.obstacles : undefined, sceneToGeo, DroneClass: Drone, SwarmClass: Swarm,
+  baseB: SITE.baseB,
   hooks: {
     log: (lv, msg) => log(lv, msg),
     onRipple: (p, color) => ripple(p, color),
@@ -1082,7 +1117,7 @@ function netShape(quiet) {                              // drone / swarm list ch
 function netApply(s, dt, quiet) {
   let shape = false;
   const sk = s.swarms || {};
-  if (sk.B && !world.swarms.B) { world.swarms.B = new Swarm(world, 'B', 'BRAVO', 'BRV', BASE_B.clone()); shape = true; }
+  if (sk.B && !world.swarms.B) { world.swarms.B = new Swarm(world, 'B', 'BRAVO', 'BRV', world.baseB.clone()); shape = true; }
   else if (!sk.B && world.swarms.B) {
     const B = world.swarms.B;
     world.hooks.onSwarmChange({ type: 'swarm2-removing', removed: B });
@@ -1257,10 +1292,10 @@ const boot = [
   ['sys', `loading swarm manifest · ${N} airframes · quad-X config`],
   ['ok', 'MAVLink bridge online · udp://0.0.0.0:14550'],
   ['ok', `RTK-GNSS reference station locked · 23 sats · ${PIN[0].toFixed(5)}, ${PIN[1].toFixed(5)}`],
-  ['ok', `base ${sceneToGeo(0, 0).map(v => v.toFixed(5)).join(', ')} · Jardí del Túria · València`],
+  ['ok', `base ${sceneToGeo(0, 0).map(v => v.toFixed(5)).join(', ')} · ${SITE.baseName} · València`],
   ['ok', 'mesh network formed · AES-256-GCM session established'],
   ['sys', 'flocking controller: reynolds/boids v3 · sep/ali/coh + goal + geofence + height map'],
-  ['info', `site model: Ciutat de les Arts i les Ciències · ${landmarks.length} landmarks · ${cacVoxels.toLocaleString('en-US')} surface voxels · city © OpenStreetMap`],
+  ['info', `site model: ${SITE.name} · ${landmarks.length} landmarks · ${cacVoxels.toLocaleString('en-US')} surface voxels · city © OpenStreetMap`],
   ['warn', `geofence loaded · ${obstacles.length} NFZ · ${obstacles[0].name} ${obstacles[0].label} r ${(obstacles[0].r * M_PER_U).toFixed(0)}m`],
   ['ok', 'launch sequence authorized · staggered takeoff'],
 ];
@@ -1407,7 +1442,7 @@ const ON_OFF = ['on', 'off'];
 const CMD_ARGS = {
   help: [], status: [], clear: ['log', 'all'], drones: ['20', '40', '60', '100', '150'],
   mode: ['patrol', 'orbit', 'formation', 'scan'], orbit: () => orbitTargets.map(l => l.code.toLowerCase()),
-  quality: ['low', 'high'], name: [], auto: ON_OFF, mission: ['demo', 'start', 'abort', 'status'], view: ['2d', '3d'], still: ON_OFF, rotate: ON_OFF, follow: ON_OFF,
+  quality: ['low', 'high'], name: [], site: () => Object.keys(SITES), auto: ON_OFF, mission: ['demo', 'start', 'abort', 'status'], view: ['2d', '3d'], still: ON_OFF, rotate: ON_OFF, follow: ON_OFF,
   swarm2: ['off', '20', '40'], role: ['friendly', 'hostile'], sel: ['a', 'b'], sweep: ['0', '45', '90'],
 };
 const argsOf = k => { const a = CMD_ARGS[k]; return typeof a === 'function' ? a() : a || []; };
@@ -1449,6 +1484,7 @@ function updateUrl() {
     const u = new URL(location.href);
     u.searchParams.set('drones', N);
     u.searchParams.set('name', PROJECT);
+    if (!NET && SITE_ID !== DEFAULT_SITE) u.searchParams.set('site', SITE_ID); else if (!NET) u.searchParams.delete('site');
     if (QUALITY === 'low') u.searchParams.set('quality', 'low'); else u.searchParams.delete('quality');
     if (VIEW === '2D') u.searchParams.set('view', '2d'); else u.searchParams.delete('view');
     if (SB) u.searchParams.set('swarm2', SB.drones.length); else u.searchParams.delete('swarm2');
@@ -1493,7 +1529,8 @@ function execCmd(raw) {
         'auto=on|off · rotación automática de modos',
         'view=2d|3d · vista cenital 2D (norte arriba) o perspectiva 3D  [V]',
         'still=on|off · cámara fija: sin giro ni seguimiento  [R] · rotate=on|off · follow=on|off por separado',
-        'swarm2=N|off · segundo enjambre BRAVO (1-80 drones, base junto al Oceanogràfic)',
+        'swarm2=N|off · segundo enjambre BRAVO (1-80 drones, base ' + SITE.baseBName + ')',
+        `site=${Object.keys(SITES).join('|')} · cambiar de escenario (recarga la página; en modo servidor: SITE_ID=… npm run server)`,
         'role=friendly|hostile · BRAVO aliado o intrusos (ALPHA los intercepta)',
         'sel=a|b · enjambre que reciben mode=/orbit=/clic  [Tab]',
         'sweep=GRADOS · barrido de la auto-rotación ±N° (0 = giro completo)',
@@ -1583,6 +1620,16 @@ function execCmd(raw) {
       break;
     }
     case 'mission': missionCmd(argRaw); break;
+    case 'site': {
+      if (!arg) { log('info', `SITE: ${SITE_ID} · ${SITE.name} · options: ${Object.entries(SITES).map(([k, v]) => `${k} (${v.name})`).join(' · ')}`); break; }
+      if (!SITES[arg]) { log('err', `unknown site '${esc(argRaw)}' · options: ${Object.keys(SITES).join(', ')}`); break; }
+      if (NET) { log('warn', `SITE: the server decides the site (now ${SITE_ID}) · restart it with SITE_ID=${arg} npm run server`); break; }
+      if (arg === SITE_ID) { log('info', `SITE: already on ${SITE.name}`); break; }
+      log('sys', `SITE: switching to ${SITES[arg].name} · reloading`);
+      const u = new URL(location.href); if (arg === DEFAULT_SITE) u.searchParams.delete('site'); else u.searchParams.set('site', arg);
+      setTimeout(() => { location.href = u.href; }, 400);
+      break;
+    }
     case 'status': {
       const c = s => drones.filter(d => d.state === s).length;
       log('info', `STATUS: ${N}${SB ? ` + ${SB.drones.length} ${SB.hostile ? 'hostile' : 'BRAVO'}` : ''} airframes · ${c('ACTIVE')} active · ${c('RTB') + c('LANDING')} rtb · ${c('CHARGING')} charging · mode ${SA.mode}${SB ? ` / ${SB.modeLabel}` : ''} · view ${VIEW}${!ROTATE && !FOLLOW ? ' (still)' : ''} · quality ${QUALITY} · ${$('#fps').textContent}`);
@@ -1691,7 +1738,7 @@ function drawMap() {
   }
   // landmarks
   ctx.font = '8px monospace'; ctx.fillStyle = 'rgba(160,240,255,.85)';
-  for (const l of landmarks) if (!l.nfz) ctx.fillText(l.code, X(l.x) - 7, Y(l.z) + (l.id === 'assut' ? -6 : 3));
+  for (const l of landmarks) if (!l.nfz) ctx.fillText(l.code, X(l.x) - 7, Y(l.z) + (SITE.labelDy[l.id] ?? 3));
   // RTK reference station (the pin)
   ctx.fillStyle = '#4dff9a'; ctx.beginPath(); const rx = X(rtk.x), ry = Y(rtk.z);
   ctx.moveTo(rx, ry - 3.5); ctx.lineTo(rx + 3, ry); ctx.lineTo(rx, ry + 3.5); ctx.lineTo(rx - 3, ry); ctx.fill();
@@ -2098,7 +2145,7 @@ if (N2 && !NET) { setSwarm2(N2, true); if (ROLE2 === 'hostile') setRole('hostile
 syncCtrl();
 frame();
 // debug / tests
-window.__swarm = { world, net: NET, netDrones, extMarkers, hm: HM, city: CITY, drones: () => drones, landmarks, obstacles, topAt, sceneToGeo, get SA() { return SA; }, get SB() { return SB; }, setMode: (m, w) => SEL.setMode(m, w), setSwarm2, setRole, runCmd, camera, controls, topCam, topControls, setView, setCamAuto, cacVoxels, cityMesh, cacMeshes, scene, gridGroup,
+window.__swarm = { site: SITE, world, net: NET, netDrones, extMarkers, hm: HM, city: CITY, drones: () => drones, landmarks, obstacles, topAt, sceneToGeo, get SA() { return SA; }, get SB() { return SB; }, setMode: (m, w) => SEL.setMode(m, w), setSwarm2, setRole, runCmd, camera, controls, topCam, topControls, setView, setCamAuto, cacVoxels, cityMesh, cacMeshes, scene, gridGroup,
   warp(sec) { for (let t = 0; t < sec; t += 0.05) simStep(0.05); },
   warpFixed(sec, dt) { const n = Math.round(sec / dt); for (let i = 0; i < n; i++) simStep(dt); } };   // fixed dt (parity tests)
 </script>

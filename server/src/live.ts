@@ -32,7 +32,7 @@ export function helloMessage(ctx: AppCtx): unknown {
     serverT: ctx.world.T,
     tickHz: ctx.cfg.tickHz, snapHz: ctx.cfg.snapHz, seed: ctx.cfg.seed,
     worldKind: ctx.runner.kind,
-    site: { id: s.id, name: s.name, origin: s.city.origin, base: s.city.base, theta: s.city.theta, cell: s.city.cell, n: s.city.n, sc: SC },
+    site: { id: s.id, name: s.name, short: s.reg.short, shapesGlobal: s.reg.shapesGlobal, origin: s.city.origin, base: s.city.base, theta: s.city.theta, cell: s.city.cell, n: s.city.n, sc: SC },
     obstacles: (ctx.world.obstacles ?? []).map((o: any) => ({ x: o.x, z: o.z, r: o.r, h: o.h, type: o.type, name: o.name, label: o.label })),
     landmarks: s.landmarks.map(l => ({ id: l.id, code: l.code, name: l.name, x: l.x, z: l.z, r: l.r, h: l.h, nfz: !!l.nfz })),
   };

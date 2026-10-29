@@ -120,3 +120,11 @@ First-time setup (migrate, export the site, load it) is in the README section "S
 5. **Not deployed.** The Hetzner server is untouched.
 6. **BRAVO / hostile swarms in server mode** are not wired. The shared sim code supports them.
 7. **`index.html` needs a static server.** It no longer opens from `file://`, because the simulation is an ES module.
+
+## 8. Second site: Estadi Ciutat de València · Orriols (added later the same day)
+
+- **What:** Levante UD's stadium, the Arena mall and offices, Torre Orriols, the Metrovalència depot, the parish church, the Orriols pitch and park, about 4.5 km north of the Ciutat. Formulas from `../voxel-maps/arena-levante-voxels` (`tools/sync-lev.py` → `lev-shapes.js`); surroundings from OSM (`tools/osm-city.py --site levante` → `assets/levante-city.js`).
+- **How to open it:** offline `?site=levante` (also on the public GitHub Pages link) or the console command `site=levante`; server mode `SITE_ID=levante npm run server` (one site per server process).
+- **Registry:** `sites.js` holds everything site-specific (files, landmark codes, NFZ, bases, RTK, camera). The default is still the Ciutat, and its behaviour is unchanged (bit-identical with the same seed).
+- **Site layout:** NFZ-A over the stadium (112 m radius). ALPHA base on open ground north of the Ronda Nord; BRAVO base in the Horta fields. The demo mission there is a 4-landmark loop (no 5-landmark loop avoids the stadium NFZ).
+- **Checks:** browser runs of 5 scenarios on Levante with 0 building contacts. The only friendly NFZ graze was a single 1 in formation mode, which the original Ciutat code also shows. `npm test` 57/57. Server-mode demo mission created and started on Levante in the browser.

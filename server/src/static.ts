@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import type { FastifyInstance } from 'fastify';
 
 const ROOT = resolve(fileURLToPath(new URL('../../', import.meta.url)));
-const FILES = new Set(['index.html', 'sim-core.js', 'net-client.js', 'cac-shapes.js']);
+const FILES = new Set(['index.html', 'sim-core.js', 'net-client.js', 'cac-shapes.js', 'sites.js', 'lev-shapes.js']);
 const DIRS = ['assets'];
 const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',

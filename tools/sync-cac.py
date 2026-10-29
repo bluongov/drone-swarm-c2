@@ -7,7 +7,7 @@ Usage:  python3 tools/sync-cac.py [path/to/calatrava-voxels/index.html]
 import os, re, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, '..', 'calatrava-voxels', 'index.html')
+SRC = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, '..', 'voxel-maps', 'calatrava-voxels', 'index.html')
 OUT = os.path.join(ROOT, 'cac-shapes.js')
 
 html = open(SRC, encoding='utf-8').read()

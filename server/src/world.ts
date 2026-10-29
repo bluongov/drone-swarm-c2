@@ -45,7 +45,7 @@ export async function createWorld(site: Site, cfg: Config, bus: Bus, opts: { for
     onRipple: (pos, color) => bus.emit('ripple', { x: pos.x, y: pos.y, z: pos.z, color }),
     onMissionEvent: ev => bus.emit('worldMission', ev),
   };
-  const common = { topAt: site.terrain.topAt, topNear: site.terrain.topNear, landmarks: site.landmarks, seed: cfg.seed, hooks, n: cfg.drones || undefined, sceneToGeo: site.frames.sceneToGeo };
+  const common = { topAt: site.terrain.topAt, topNear: site.terrain.topNear, landmarks: site.landmarks, seed: cfg.seed, hooks, n: cfg.drones || undefined, sceneToGeo: site.frames.sceneToGeo, baseB: site.reg.baseB };
   const core: any = await import('../../sim-core.js');
   let kind: CreatedWorld['kind'] = 'fake', note: string | undefined;
   if (core.SimWorld && !opts.forceFake) {

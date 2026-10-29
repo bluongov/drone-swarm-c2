@@ -122,6 +122,7 @@ The bottom strip has two separate panels:
 | `swarm2=N\|off` | `swarm2=30` | Second swarm BRAVO (1–80 drones) or recall it |
 | `role=friendly\|hostile` | `role=hostile` | BRAVO as a friendly fleet or as intruders (ALPHA intercepts) |
 | `sel=a\|b` | `sel=b` | Swarm that receives `mode=`, `orbit=`, `1-4` and clicks (same as `Tab`) |
+| `site=cac\|levante` | `site=levante` | Switch site (reloads the page; in server mode the server decides: `SITE_ID=levante npm run server`) |
 | `status` | `status` | Summary: active, RTB and charging drones, mode, quality and FPS |
 | `clear` | `clear` · `clear=log` · `clear=all` | Clear the console, the SYSTEM LOG or both |
 
@@ -148,6 +149,8 @@ index.html?name=SKYNET&drones=40&quality=low
 | `sweep` | `45` | Auto-rotation sweep in degrees (`0` = 360°) |
 | `swarm2` | `0` | Drones in the second swarm BRAVO (0 = off) |
 | `role2` | `friendly` | `hostile` starts BRAVO as intruders |
+| `site` | `cac` | `levante` loads the second site (Estadi Ciutat de València · Orriols) |
+| `seed` | — | Integer: reproducible simulation (seeded random numbers) |
 | `embed` | — | `1` disables wheel zoom (for embedding in an `<iframe>` without hijacking page scroll) |
 
 ---
@@ -230,6 +233,21 @@ The surroundings are based on **OpenStreetMap**. `tools/osm-city.py` downloads d
 **Data:** © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), ODbL.
 
 To regenerate the derived data, run `python3 tools/sync-cac.py` and `python3 tools/osm-city.py`. To download fresh OSM data, delete `tools/.cache/osm-city.json` before running the second command.
+
+### Second site: Estadi Ciutat de València · Orriols (`?site=levante`)
+
+Same engine, another place about 4.5 km north: Levante UD's stadium and its neighbourhood. The formulas come from the companion project `arena-levante-voxels` (`python3 tools/sync-lev.py` → `lev-shapes.js`) and the surroundings from OSM (`python3 tools/osm-city.py --site levante` → `assets/levante-city.js`, grid rotated −15° to follow the stadium). Sites are declared in `sites.js` (codes, NFZ, bases, camera); the default stays the City of Arts and Sciences.
+
+| Code | Building |
+|---|---|
+| `EST` | Estadi Ciutat de València (NFZ-A, 112 m radius) |
+| `ARE` | Centre Comercial Arena (not an automatic orbit target: it wraps the stadium NFZ) |
+| `OFI` · `TOR` | Edifici Arena (offices) · Torre Orriols |
+| `MET` | Tallers Machado (Metrovalència depot) |
+| `PAR` · `CMP` · `PRC` | Parròquia del Sagrat Cor · Camp de Futbol Orriols · Parc d'Orriols |
+
+- **Bases**: ALPHA on open ground north of the Ronda Nord, NE of the stadium; BRAVO in the Horta fields north of the depot (both found by scanning the OSM raster for an empty square).
+- **RTK station**: on the roof of the Edifici Arena.
 
 ---
 
@@ -371,12 +389,15 @@ drone-swarm-c2/
 ├── index.html            # app (HTML + CSS + JS)
 ├── sim-core.js           # shared browser/server simulation (boids, missions)
 ├── net-client.js         # WebSocket/REST client for server mode
+├── sites.js              # site registry (cac, levante)
 ├── cac-shapes.js         # CAC voxel building formulas (generated)
+├── lev-shapes.js         # Estadi / Orriols voxel formulas (generated)
 ├── server/               # Node backend (Fastify, WebSocket, PostGIS/TimescaleDB, tests)
 ├── docker-compose.yml    # local database
 ├── docs/                 # architecture and implementation plan
 ├── assets/
 │   ├── valencia-city.js  # rasterized OSM data (generated)
+│   ├── levante-city.js   # OSM data around the Estadi / Orriols (generated)
 │   ├── demo.gif          # README GIF
 │   ├── demo.mp4          # higher-quality video
 │   └── screenshot.png

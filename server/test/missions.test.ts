@@ -26,8 +26,8 @@ after(async () => {
   }
 });
 
-async function start(over: { forceFake?: boolean; scale?: number; drones?: number } = {}) {
-  const cfg = loadConfig({ DATABASE_URL: DB_URL }, { port: 0, host: '127.0.0.1', logLevel: 'silent', drones: over.drones ?? 20, persistHz: 0, timeScale: over.scale ?? 20, seed: 1 });
+async function start(over: { forceFake?: boolean; scale?: number; drones?: number; siteId?: string } = {}) {
+  const cfg = loadConfig({ DATABASE_URL: DB_URL }, { port: 0, host: '127.0.0.1', logLevel: 'silent', drones: over.drones ?? 20, persistHz: 0, timeScale: over.scale ?? 20, seed: 1, ...(over.siteId ? { siteId: over.siteId } : {}) });
   const { app, ctx } = await buildServer(cfg, { forceFake: over.forceFake });
   await app.listen({ host: '127.0.0.1', port: 0 });
   const http = `http://127.0.0.1:${(app.server.address() as any).port}`;
@@ -87,6 +87,37 @@ test('demo mission: create -> start -> RUNNING -> DONE', { skip }, async () => {
   assert.equal(mine.at(-1).status, 'DONE');
   const idx = mine.filter(e => e.status === 'RUNNING').map(e => e.wpIdx);
   assert.deepEqual(idx, [0, 1, 2, 3, 4], 'one RUNNING event per waypoint');
+});
+
+test('demo mission on site levante: planner avoids the stadium NFZ, runs to DONE', { skip }, async () => {
+  const s = await start({ siteId: 'levante', scale: 40 });
+  assert.equal(s.ctx.site.id, 'levante');
+  const c = s.track(await s.call('POST', '/api/missions/demo'));
+  assert.equal(c.status, 201, JSON.stringify(c.body));
+  assert.equal(c.body.name, 'Demo loop Levante');
+  assert.equal(c.body.status, 'PLANNED');
+  const n = c.body.waypoints.length;
+  assert.ok(n >= 3 && n <= 5, `waypoints ${n}`);
+  const id = c.body.id as string;
+  assert.equal((await s.call('GET', `/api/missions/${id}`)).body.site_id, 'levante');
+  const st = await s.call('POST', `/api/missions/${id}/start`);
+  assert.equal(st.status, 200, JSON.stringify(st.body));
+  await s.waitStatus(id, 'DONE');
+  assert.equal(s.ctx.missionSnapshot(), null);
+  assert.equal(s.ctx.world.swarms.A.mode, 'PATROL');
+  // a route through the stadium NFZ is refused on this site
+  const est = s.ctx.site.landmarks.find(l => l.nfz)!;
+  assert.equal(est.code, 'EST');
+  const r = await s.call('POST', '/api/missions', { siteId: 'levante', swarm: 'A', name: 'test-lev nfz', waypoints: [s.geo(est.x - 90, est.z, 60), s.geo(est.x, est.z, 60), s.geo(est.x + 90, est.z, 60)] });
+  assert.equal(r.status, 422, JSON.stringify(r.body));
+  assert.ok(r.body.conflicts.some((x: any) => x.type === 'NFZ'));
+});
+
+test('demo mission on cac is named Demo loop Ciutat', { skip }, async () => {
+  const s = await start({ drones: 4 });
+  const c = s.track(await s.call('POST', '/api/missions/demo'));
+  assert.equal(c.status, 201, JSON.stringify(c.body));
+  assert.equal(c.body.name, 'Demo loop Ciutat');
 });
 
 test('route through NFZ-A at 60 m -> 422 NFZ', { skip }, async () => {

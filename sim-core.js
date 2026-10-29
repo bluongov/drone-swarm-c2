@@ -103,8 +103,8 @@ export function outOfNfz(obstacles, p) {
 export function makeObstacles(rand, landmarks) {
   const obstacles = [];
   const addNfz = (x, z, r, h, name, label) => { obstacles.push({ x, z, r, h, type: 'NFZ', name, label }); };
-  const hmf = landmarks.find(l => l.nfz);
-  if (hmf) addNfz(hmf.x, hmf.z, 46, 110, 'NFZ-A', "L'HEMISFÈRIC");
+  const hmf = landmarks.find(l => l.nfz);              // site NFZ landmark (Hemisfèric at the Ciutat); size/label from sites.js
+  if (hmf) addNfz(hmf.x, hmf.z, hmf.nfzR ?? 46, hmf.nfzH ?? 110, 'NFZ-A', hmf.nfzLabel ?? "L'HEMISFÈRIC");
   let x, z, r, ok = false, t = 0;
   while (!ok && t++ < 300) {
     const a = rand(0, Math.PI * 2), R = rand(120, 230);
@@ -317,7 +317,7 @@ export class SimSwarm {
   orbitLandmark(l) {
     this.orbitCenter.set(l.x, 0, l.z);
     this.orbitR0 = clamp(l.r + 12, 30, 90) + (this.key === 'B' ? 8 : 0);
-    this.orbitAlt0 = l.id === 'assut' ? l.h + 8 : clamp(l.h * 0.6, 26, 70);   // bridge: stay above the cable fan
+    this.orbitAlt0 = (l.orbitAbove ?? l.id === 'assut') ? l.h + 8 : clamp(l.h * 0.6, 26, 70);   // bridge: stay above the cable fan
   }
   orbitPoint(p) {                                 // operator click: snap to a landmark if it was clicked
     const l = this.world.orbitTargets.find(l => Math.hypot(l.x - p.x, l.z - p.z) < Math.max(l.r, 16));
@@ -478,17 +478,19 @@ export class SimSwarm {
 // opts: { topAt, topNear, landmarks, obstacles?, seed?, rand?, hooks?, n?, sceneToGeo?, DroneClass?, SwarmClass? }
 //   rand: uniform source () => [0,1) or a makeRand() object; seed: mulberry32(seed); neither: makeRand() default
 //   n: initial ALPHA size (creates the drones and the first patrol route; omitted = swarm A created empty)
+//   baseB: [x, z] BRAVO base in scene units (sites.js); landmark fields nfzR/nfzH/nfzLabel/orbitAbove are optional
 export class SimWorld {
   constructor(opts) {
-    const { topAt, topNear, landmarks, obstacles, seed, rand, hooks, n, sceneToGeo, DroneClass, SwarmClass } = opts;
+    const { topAt, topNear, landmarks, obstacles, seed, rand, hooks, n, sceneToGeo, DroneClass, SwarmClass, baseB } = opts;
     this.topAt = topAt; this.topNear = topNear; this.landmarks = landmarks;
+    this.baseB = baseB ? V3(baseB[0], 0, baseB[1]) : BASE_B.clone();   // BRAVO base [x, z] (sites.js), default = the Ciutat's
     this.hooks = hooks || {};
     this.sceneToGeo = sceneToGeo || null;
     const R = rand && typeof rand === 'object' ? rand
       : makeRand(rand ? rand : seed != null ? mulberry32(seed) : undefined);
     this.R = R; this.u = R.u; this.rand = R.rand; this.pick = R.pick;
     this.DroneClass = DroneClass || SimDrone; this.SwarmClass = SwarmClass || SimSwarm;
-    this.orbitTargets = landmarks.filter(l => !l.nfz);
+    this.orbitTargets = landmarks.filter(l => !l.nfz && !l.noOrbit);
     this.obstacles = obstacles || makeObstacles(this.rand, landmarks);
     this.T = 0; this.auto = true; this.lastInteraction = -99; this.neiSum = 0; this.neiCnt = 0; this.seq = 0;
     this.drones = [];
@@ -599,7 +601,7 @@ export class SimWorld {
     }
     const fresh = !this.swarms.B;
     if (fresh) {
-      const SB = this.swarms.B = new this.SwarmClass(this, 'B', 'BRAVO', 'BRV', BASE_B.clone());
+      const SB = this.swarms.B = new this.SwarmClass(this, 'B', 'BRAVO', 'BRV', this.baseB.clone());
       SB.genRoute(); SB.mode = SA.mode === 'SCAN' ? 'ORBIT' : 'SCAN';
       if (SB.mode === 'ORBIT') SB.orbitLandmark(this.pick(this.orbitTargets));
     }

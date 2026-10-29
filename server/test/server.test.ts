@@ -70,6 +70,7 @@ test('WS /live: hello, then >= 5 snaps within 1 s at ~10 Hz', async () => {
   assert.equal(hello.tickHz, 30); assert.equal(hello.snapHz, 10);
   assert.equal(hello.seed, loadConfig({}).seed);
   assert.ok(hello.site.id && Array.isArray(hello.site.origin));
+  assert.equal(hello.site.short, 'Ciutat'); assert.equal(hello.site.shapesGlobal, 'CAC');
   assert.ok(Array.isArray(hello.obstacles) && Array.isArray(hello.landmarks));
   assert.ok(hello.landmarks.every((l: any) => !('mesh' in l)));
   const t0 = c.msgs.find(x => x.m.type === 'hello')!.at;
@@ -267,6 +268,43 @@ test('site is loaded from the DB when rows exist', { skip: dbReady ? false : 'DB
   assert.equal(s.ctx.site.sources.city, 'db');
   const h: any = await (await fetch(`${s.http}/api/health`)).json();
   assert.equal(h.db, true);
+});
+
+test('site levante: SITE_ID=levante serves hello.site, 8 landmarks, NFZ-A ESTADI, BRAVO base from the registry', { skip: dbReady ? false : 'DB not up / schema missing' }, async () => {
+  const has = await probe!.query(`SELECT 1 FROM sites WHERE id = 'levante'`);
+  assert.equal(has.rows.length, 1, 'site levante not in the DB: run node tools/export-site.mjs --site levante && npm run db:load');
+  const s = await start({ siteId: 'levante', drones: 10 }, { db: track(createDb(dbUrl)), forceFake: false });
+  assert.equal(s.ctx.site.sources.city, 'db'); assert.equal(s.ctx.site.sources.landmarks, 'db');
+  assert.equal(s.ctx.site.reg.short, 'Levante');
+  assert.deepEqual(s.ctx.site.landmarks.map(l => l.code).sort(), ['ARE', 'CMP', 'EST', 'MET', 'OFI', 'PAR', 'PRC', 'TOR']);
+  const w: any = s.ctx.world;
+  assert.equal(w.baseB.x, -107); assert.equal(w.baseB.z, -126);
+  const nfz = w.obstacles.find((o: any) => o.name === 'NFZ-A');
+  assert.match(nfz.label, /^ESTADI/); assert.equal(nfz.r, 56); assert.equal(nfz.h, 110);
+
+  const c = await connect(`${s.ws}/live`);
+  const hello = await c.wait(m => m.type === 'hello');
+  assert.equal(hello.site.id, 'levante');
+  assert.equal(hello.site.short, 'Levante'); assert.equal(hello.site.shapesGlobal, 'LEV');
+  assert.equal(hello.landmarks.length, 8);
+  assert.ok(hello.obstacles.some((o: any) => o.name === 'NFZ-A' && /^ESTADI/.test(o.label)));
+  c.close();
+
+  const list: any = await (await fetch(`${s.http}/api/sites`)).json();
+  const lev = list.sites.find((x: any) => x.id === 'levante'), cac = list.sites.find((x: any) => x.id === 'cac');
+  assert.deepEqual([lev.loaded, lev.active, cac.loaded, cac.active], [true, true, true, false]);
+  assert.equal(lev.name, 'Estadi Ciutat de València · Orriols');
+  const a = await (await fetch(`${s.http}/api/sites/levante/shapes.js`)).text();
+  const b = await (await fetch(`${s.http}/api/sites/levante/cac.js`)).text();
+  assert.match(a, /window\.LEV\b/); assert.equal(a, b);
+  // the other site is served from the DB too (cac.js of cac is the CAC script)
+  assert.match(await (await fetch(`${s.http}/api/sites/cac/shapes.js`)).text(), /window\.CAC\b/);
+});
+
+test('static allowlist: sites.js and lev-shapes.js are served, server/ is not', async () => {
+  const s = await start();
+  for (const f of ['sites.js', 'lev-shapes.js', 'cac-shapes.js']) assert.equal((await fetch(`${s.http}/${f}`)).status, 200, f);
+  assert.equal((await fetch(`${s.http}/server/src/site.ts`)).status, 404);
 });
 
 test('server keeps running when the DB is down (db:false, rows queued then bounded)', async () => {

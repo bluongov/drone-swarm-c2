@@ -10,20 +10,31 @@ u axis follows the complex (the Calatrava buildings and the street grid around t
 The buildings that the dashboard draws from formulas (cac-shapes.js) are left out of h.
 
 Output: assets/valencia-city.js  ->  window.CITY = { ..., h: base64(gzip), c: base64(gzip) }
-Usage:  python3 tools/osm-city.py            (downloads tools/.cache/osm-city.json if missing)
+Usage:  python3 tools/osm-city.py [--site cac|levante]   (downloads tools/.cache/osm-<site>.json if missing)
 Only the Python standard library is needed. Data (c) OpenStreetMap contributors, ODbL.
 """
 import base64, gzip, json, math, os, re, sys, urllib.parse, urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CACHE = os.path.join(ROOT, 'tools', '.cache', 'osm-city.json')
-OUT = os.path.join(ROOT, 'assets', 'valencia-city.js')
-SHAPES = os.path.join(ROOT, 'cac-shapes.js')
-
-ORIGIN = (39.45472, -0.35250)      # lat, lon of the site frame used by cac-shapes.js (x east, y north, m)
 R_EARTH = 6371008.8
-BASE = (180.0, 240.0)              # drone base in the site frame (Jardí del Túria, NE of the Museu)
-THETA = math.radians(-40.5)        # grid u axis (= main axis of the complex), ccw from east
+# One entry per dashboard site (see sites.js). origin = lat, lon of the site frame used by the shapes file
+# (x east, y north, m); base = drone base in that frame; theta = grid u axis, ccw from east.
+SITES = {
+    'cac': dict(cache='osm-city.json', out='valencia-city.js', shapes='cac-shapes.js', title='the Ciutat de les Arts i les Ciències',
+                origin=(39.45472, -0.35250), base=(180.0, 240.0), theta=-40.5),     # base: Jardí del Túria, NE of the Museu
+    'levante': dict(cache='osm-levante.json', out='levante-city.js', shapes='lev-shapes.js', title="the Estadi Ciutat de València (Orriols)",
+                    origin=(39.49472, -0.36390), base=(302.0, 122.0), theta=-15.0),  # base: open ground N of the Ronda Nord, NE of the stadium (88 m clear square, tools/find-base); theta: stadium axes (75 deg)
+}
+SITE_ID = sys.argv[sys.argv.index('--site') + 1] if '--site' in sys.argv else 'cac'
+if SITE_ID not in SITES:
+    sys.exit(f'unknown site {SITE_ID!r}; one of {", ".join(SITES)}')
+_S = SITES[SITE_ID]
+CACHE = os.path.join(ROOT, 'tools', '.cache', _S['cache'])
+OUT = os.path.join(ROOT, 'assets', _S['out'])
+SHAPES = os.path.join(ROOT, _S['shapes'])
+ORIGIN = _S['origin']
+BASE = _S['base']
+THETA = math.radians(_S['theta'])
 CELL = 4.0                         # metres per cell
 N = 550                            # cells per side -> 2.2 km
 HALF = N * CELL / 2
@@ -70,7 +81,7 @@ def fetch():
  way["railway"~"rail|tram|light_rail"]({bb});
 );
 out geom;"""
-    req = urllib.request.Request('https://overpass-api.de/api/interpreter', data=urllib.parse.urlencode({'data': q}).encode(),
+    req = urllib.request.Request(os.environ.get('OVERPASS_URL', 'https://overpass-api.de/api/interpreter'), data=urllib.parse.urlencode({'data': q}).encode(),
                                  headers={'User-Agent': 'drone-swarm-c2 osm-city.py'})
     data = urllib.request.urlopen(req, timeout=240).read()
     os.makedirs(os.path.dirname(CACHE), exist_ok=True)
@@ -237,7 +248,7 @@ def main():
         'cover': COVER, 'h': b64(H), 'c': b64(Cv),
     }
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
-    js = ('// Surroundings of the Ciutat de les Arts i les Ciències, baked by tools/osm-city.py.\n'
+    js = (f'// Surroundings of {_S["title"]}, baked by tools/osm-city.py --site {SITE_ID}.\n'
           '// Map data (c) OpenStreetMap contributors, ODbL 1.0 - https://www.openstreetmap.org/copyright\n'
           'window.CITY = ' + json.dumps(data, separators=(',', ':')) + ';\n')
     open(OUT, 'w').write(js)

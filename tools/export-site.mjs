@@ -1,27 +1,26 @@
 // One-off export of the derived site layers from the ORIGINAL frontend (Playwright).
 // Samples __swarm.topAt over every cell centre of the CITY grid -> height map, dumps landmarks + NFZ-A.
-// Output: tools/.cache/site-export.json (git-ignored).
-// Usage: node tools/export-site.mjs [--root DIR] [--port N]
-//   default root: pristine copy of git HEAD in /tmp/ds-head (so a half-edited index.html cannot break the export).
+// Output: tools/.cache/site-export-<id>.json (git-ignored).
+// Usage: node tools/export-site.mjs [--site <id>] [--root DIR] [--port N]
+//   --site: key of sites.js (default 'cac'); the page is opened as index.html?site=<id> and must report __swarm.site.id === id.
+//   default root: the working tree (repo root). --root DIR serves another copy (e.g. a git archive of a commit).
 import { chromium } from 'playwright';
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { makeTerrain } from '../sim-core.js';
+import { DEFAULT_SITE, SITES } from '../sites.js';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
 const port = Number(arg('--port', 8702));
-let root = arg('--root', null);
-const sourceCommit = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD']).toString().trim();
-if (!root) {
-  root = '/tmp/ds-head';
-  rmSync(root, { recursive: true, force: true });
-  mkdirSync(root, { recursive: true });
-  execFileSync('sh', ['-c', `git -C '${repo}' archive HEAD | tar -x -C '${root}'`]);
-}
+const siteId = arg('--site', DEFAULT_SITE);
+if (!SITES[siteId]) { console.error(`unknown site '${siteId}' (sites.js: ${Object.keys(SITES).join(', ')})`); process.exit(2); }
+const root = resolve(arg('--root', repo));
+const git = (...a) => { try { return execFileSync('git', ['-C', repo, ...a]).toString().trim(); } catch { return ''; } };
+const sourceCommit = git('rev-parse', 'HEAD') + (git('status', '--porcelain') ? '+worktree' : '');
 
 const server = spawn('python3', ['-m', 'http.server', String(port), '--bind', '127.0.0.1'], { cwd: root, stdio: 'ignore' });
 await new Promise(r => setTimeout(r, 1000));
@@ -34,8 +33,12 @@ try {
   const page = await browser.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(String(e)));
-  await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://127.0.0.1:${port}/index.html?site=${encodeURIComponent(siteId)}&quality=low`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => !!window.__swarm, null, { timeout: 180000, polling: 500 });
+  const pageSite = await page.evaluate(() => window.__swarm.site?.id ?? null);
+  if (pageSite !== siteId) {
+    throw new Error(`page reports __swarm.site.id = ${JSON.stringify(pageSite)}, expected '${siteId}' (root ${root}: index.html without ?site= support?)`);
+  }
 
   // cell centres in scene coords: same math as sim-core.js makeTerrain().cellCentre (computed in-page from CITY)
   const out = await page.evaluate(() => {
@@ -51,7 +54,7 @@ try {
     let bin = ''; for (let k = 0; k < u8.length; k += 0x8000) bin += String.fromCharCode.apply(null, u8.subarray(k, k + 0x8000));
     const city = { origin: C.origin, base: C.base, theta: C.theta, cell: C.cell, n: C.n };
     const landmarks = window.__swarm.landmarks.map(({ mesh, ...l }) => l);
-    const nfzA = window.__swarm.obstacles.find(o => o.type === 'NFZ' && o.name === 'NFZ-A') || null;
+    const nfzA = window.__swarm.obstacles.find(o => o.type === 'NFZ' && o.name === 'NFZ-A') || null;   // {x,z,r,h,type,name,label}
     return { city, hm_b64: btoa(bin), landmarks, nfzA: nfzA && JSON.parse(JSON.stringify(nfzA)) };
   });
   if (errors.length) console.log('page errors:', errors);
@@ -61,7 +64,7 @@ try {
   const { n } = out.city;
   if (hm.length !== n * n) throw new Error(`hm length ${hm.length} != ${n * n}`);
   let nonZero = 0; for (const v of hm) if (v !== 0) nonZero++;
-  console.log(`cells: ${hm.length}, non-zero: ${nonZero}, landmarks: ${out.landmarks.length}, nfzA: ${JSON.stringify(out.nfzA)}`);
+  console.log(`site: ${siteId}, root: ${root}\ncells: ${hm.length}, non-zero: ${nonZero}, landmarks: ${out.landmarks.length}, nfzA: ${JSON.stringify(out.nfzA)}`);
   if (!out.nfzA) throw new Error('NFZ-A not found in __swarm.obstacles');
 
   // verify: browser topAt vs Node makeTerrain(city, hm).topAt on 2000 random points inside ±280 units
@@ -82,8 +85,9 @@ try {
   if (mismatch || ccBad) throw new Error('height map verification failed');
 
   mkdirSync(resolve(repo, 'tools/.cache'), { recursive: true });
-  const file = resolve(repo, 'tools/.cache/site-export.json');
+  const file = resolve(repo, `tools/.cache/site-export-${siteId}.json`);
   writeFileSync(file, JSON.stringify({
+    siteId,
     city: out.city,
     hm_gzip_b64: gzipSync(hmBytes, { level: 9 }).toString('base64'),
     landmarks: out.landmarks,

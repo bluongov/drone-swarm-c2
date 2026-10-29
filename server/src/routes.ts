@@ -1,5 +1,6 @@
 // REST: health and site data.
 import type { FastifyInstance, FastifyReply } from 'fastify';
+import { SITES } from '../../sites.js';
 import { circleFeature } from './site.ts';
 import type { AppCtx } from './world.ts';
 
@@ -44,17 +45,35 @@ export async function registerRoutes(app: FastifyInstance, ctx: AppCtx): Promise
     };
   });
 
+  // registry sites + whatever the DB has; `loaded` = rows exist in the DB (npm run db:load), `active` = the site this server simulates
+  app.get('/api/sites', async () => {
+    const inDb = new Map<string, string>();
+    if (ctx.db) {
+      try { for (const r of (await ctx.db.query('SELECT id, name FROM sites ORDER BY id')).rows) inDb.set(r.id, r.name); } catch { /* DB down: all loaded:false */ }
+    }
+    const ids = [...new Set([...Object.keys(SITES), ...inDb.keys()])];
+    return {
+      sites: ids.map(id => {
+        const reg = (SITES as Record<string, any>)[id];
+        return { id, name: reg?.name ?? inDb.get(id) ?? id, short: reg?.short ?? null, loaded: inDb.has(id), active: id === ctx.site.id };
+      }),
+    };
+  });
+
   app.get<{ Params: { id: string } }>('/api/sites/:id', async (req, reply) => {
     const site = await ctx.getSite(req.params.id);
     if (!site) return notFound(reply, 'site');
     return reply.type('application/json; charset=utf-8').send(site.cityJson);
   });
 
-  app.get<{ Params: { id: string } }>('/api/sites/:id/cac.js', async (req, reply) => {
+  // the site's building formulas (classic script setting window[shapesGlobal]); cac.js is the original name, kept
+  const shapes = async (req: { params: { id: string } }, reply: FastifyReply) => {
     const site = await ctx.getSite(req.params.id);
-    if (!site?.cacJs) return notFound(reply, 'cac.js');
+    if (!site?.cacJs) return notFound(reply, 'shapes.js');
     return reply.type('application/javascript; charset=utf-8').send(site.cacJs);
-  });
+  };
+  app.get<{ Params: { id: string } }>('/api/sites/:id/cac.js', shapes);
+  app.get<{ Params: { id: string } }>('/api/sites/:id/shapes.js', shapes);
 
   app.get<{ Params: { id: string } }>('/api/sites/:id/world', async (req, reply) => {
     const site = await ctx.getSite(req.params.id);

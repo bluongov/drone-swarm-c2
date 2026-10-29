@@ -155,7 +155,7 @@ export async function validateRoute(ctx: AppCtx, site: Site, wps: Waypoint[]): P
 
 // ---------------- demo route ----------------
 
-// 5 waypoints around the Ciutat: landmark positions (non-NFZ) ordered around their centroid, legs kept clear of every NFZ
+// 5 waypoints around the site (any site of sites.js): landmark positions (non-NFZ) ordered around their centroid, legs kept clear of every NFZ
 // circle (+25 units), altitudes raised until terrain + NFZ validation passes. Deterministic for a given site and world.
 export function planDemo(site: Site, world: { obstacles?: any[] }): Waypoint[] {
   const circles = obstacleCircles(world);
@@ -190,7 +190,17 @@ export function planDemo(site: Site, world: { obstacles?: any[] }): Waypoint[] {
     }
     return best;
   };
-  const best = bestOf(landmarkSets) ?? bestOf(ringSets);
+  // fallback when no 5-landmark loop is NFZ-free (e.g. a random NFZ-B in the way): drop landmarks, down to 3 waypoints
+  const subsets = (k: number): Pt[][] => {
+    const out: Pt[][] = [];
+    const rec = (from: number, acc: Pt[]) => {
+      if (acc.length === k) { out.push(acc); return; }
+      for (let i = from; i < lms.length; i++) rec(i + 1, [...acc, lms[i]]);
+    };
+    rec(0, []);
+    return out;
+  };
+  const best = bestOf(landmarkSets) ?? (lms.length >= 4 ? bestOf(subsets(4)) : null) ?? (lms.length >= 3 ? bestOf(subsets(3)) : null) ?? bestOf(ringSets);
   if (!best) throw new Error('no NFZ-free demo loop found');
   const pts: P[] = best.map(p => ({ x: p.x, z: p.z, alt_m: 60 }));
   for (let it = 0; it < 8; it++) {
@@ -337,9 +347,10 @@ export function registerMissions(app: FastifyInstance, ctx: AppCtx): void {
       if (!site) return fail(reply, 404, `unknown site ${siteId}`);
       let wps: Waypoint[];
       try { wps = planDemo(site, ctx.world); } catch (err) { return fail(reply, 500, (err as Error).message); }
-      const res = await createMission(siteId, 'A', 'Demo loop Ciutat', wps, site);
+      const name = `Demo loop ${site.reg.short}`;
+      const res = await createMission(siteId, 'A', name, wps, site);
       if ('conflicts' in res) return reply.code(422).send({ conflicts: res.conflicts, warnings: res.warnings });
-      return reply.code(201).send({ id: res.id, status: 'PLANNED', name: 'Demo loop Ciutat', waypoints: wps, warnings: res.warnings });
+      return reply.code(201).send({ id: res.id, status: 'PLANNED', name, waypoints: wps, warnings: res.warnings });
     });
 
     inst.get('/api/missions', async (req, reply) => {

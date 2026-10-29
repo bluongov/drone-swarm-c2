@@ -11,6 +11,7 @@
     "db:down": "docker compose down",
     "db:migrate": "node --env-file-if-exists=.env server/db/migrate.ts",
     "db:load": "node --env-file-if-exists=.env server/db/load-site.ts",
+    "export:site": "node tools/export-site.mjs",
     "server": "node --env-file-if-exists=.env server/src/index.ts",
     "typecheck": "tsc -p server/tsconfig.json --noEmit",
     "test": "node --env-file-if-exists=.env --test --test-concurrency=1 server/test/",
