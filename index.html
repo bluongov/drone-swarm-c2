@@ -40,6 +40,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#02070c;color:var(--
 .mode b{color:#fff;font-size:15px;letter-spacing:.22em;margin:0 10px}
 .tag{border:1px solid var(--g);color:var(--g);padding:1px 6px;font-size:10px;letter-spacing:.15em}
 .tag.off{border-color:var(--c2);color:var(--c2)}
+.tag.warn{border-color:var(--y);color:var(--y);animation:blink 1s steps(2) infinite}
 .right{white-space:nowrap}
 .right span{margin-left:18px}
 .right b{color:#fff;font-weight:normal}
@@ -182,7 +183,7 @@ body.min #hud > :not(#top):not(#center), body.min .col > *{display:none}
   #top{padding:6px 10px;flex-wrap:wrap;gap:2px 10px}
   .brand{font-size:11px;letter-spacing:.1em}
   .mode{font-size:10px} .mode b{font-size:12px;margin:0 6px}
-  .right span:not(.live){display:none}
+  .right span:not(.live):not(#net){display:none} #net{font-size:8px;padding:0 4px;margin-left:0}
   #pMap{padding:5px} #pMap .title{font-size:8px;margin-bottom:3px} #pMap .title span:last-child{display:none}
   #map{width:100%}
   #ctrl{display:flex} #hint{display:none}
@@ -228,6 +229,7 @@ body.min #hud > :not(#top):not(#center), body.min .col > *{display:none}
     <div class="brand"><span class="logo">◈</span>PROJECT <b id="pname"></b> <span class="dim">// AUTONOMOUS SWARM C2</span></div>
     <div class="mode">MODE<b id="mode">PATROL</b><span id="mode2"></span><span id="auto" class="tag">AUTO</span></div>
     <div class="right">
+      <span class="tag off" id="net" title="simulation source">OFFLINE SIM</span>
       <span class="live"><i></i>LIVE</span>
       <span>UTC <b id="clock">--:--:--</b></span>
       <span>T+ <b id="tplus">00:00:00</b></span>
@@ -310,6 +312,8 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+// simulation core (shared with the server): drones, swarms, flocking, NFZ list, intercepts
+import { AREA, MAXS, MODES, MODE_W, SC, M_PER_U, R_NEI, BASE_B, V3, clamp, lerpAngle, SimWorld, SimDrone, SimSwarm } from './sim-core.js';
 
 // ================= CONFIG =================
 const params = new URLSearchParams(location.search);
@@ -327,28 +331,18 @@ let N2 = Math.min(80, Math.max(0, parseInt(params.get('swarm2')) || 0));
 const ROLE2 = params.get('role2') === 'hostile' ? 'hostile' : 'friendly';
 // auto-rotación: barrido de ida y vuelta de ±SWEEP grados alrededor de la vista inicial (0 = giro completo de 360°)
 let SWEEP = params.has('sweep') ? Math.min(180, Math.max(0, parseFloat(params.get('sweep')) || 0)) : 45;
-const AREA = 280;                       // semilado de la zona de operaciones (1 unidad = 2 m → ±560 m)
-const MAXS = 20, MAXF = 28, R_NEI = 16, R_SEP = 7;
-const MODES = ['PATROL', 'ORBIT', 'FORMATION', 'SCAN'];
-const MODE_W = {
-  PATROL:    { sep: 2.2, ali: 1.0, coh: 0.8, goal: 0.7, arrive: 1,  minS: 7 },
-  ORBIT:     { sep: 2.4, ali: 0.2, coh: 0.0, goal: 1.6, arrive: 18, minS: 0 },
-  FORMATION: { sep: 2.2, ali: 0.3, coh: 0.0, goal: 1.8, arrive: 18, minS: 0 },
-  SCAN:      { sep: 2.2, ali: 0.2, coh: 0.0, goal: 1.8, arrive: 18, minS: 0 },
-  INTRUDE:   { sep: 2.0, ali: 0.7, coh: 0.6, goal: 1.1, arrive: 10, minS: 6 },   // enjambre BRAVO en rol hostil
-  INTERCEPT: { sep: 1.6, ali: 0.0, coh: 0.0, goal: 2.4, arrive: 6,  minS: 0 },   // interceptor de ALPHA
-};
+// AREA, MAXS/MAXF/R_NEI/R_SEP, MODES and MODE_W live in sim-core.js (imported above)
+// seed=N (entero): simulación reproducible (mulberry32); sin parámetro se usa Math.random como siempre
+const SEED = params.has('seed') && Number.isFinite(parseInt(params.get('seed'))) ? parseInt(params.get('seed')) : null;
+// server=ws://host:port → server mode: the server owns the simulation, this page renders it (see SERVER MODE below). Without it: offline sim.
+const SERVER_PARAM = params.get('server');
 const STATE_COLOR = { ACTIVE: 0x3ff0ff, RTB: 0xffcc33, LANDING: 0xffcc33, CHARGING: 0x4dff9a, LAUNCH: 0xffffff, IDLE: 0x557788 };
 const STATE_SHORT = { ACTIVE: 'ACT', RTB: 'RTB', LANDING: 'LND', CHARGING: 'CHG', LAUNCH: 'LCH', IDLE: 'IDL' };
 
 const $ = s => document.querySelector(s);
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = a => a[Math.floor(Math.random() * a.length)];
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const pad2 = n => String(n).padStart(2, '0');
-const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
-function limit(v, m) { const l = v.length(); if (l > m) v.multiplyScalar(m / l); return v; }
-function lerpAngle(a, b, t) { let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI; if (d < -Math.PI) d += Math.PI * 2; return a + d * t; }
 const hdgOf = d => Math.round((Math.atan2(d.vel.x, -d.vel.z) * 180 / Math.PI + 360) % 360);
 $('#pname').textContent = PROJECT;
 document.title = `${PROJECT} // SWARM C2`;
@@ -403,13 +397,98 @@ const sun = new THREE.DirectionalLight(0x88ccff, 1.1);
 sun.position.set(100, 200, 50);
 scene.add(sun);
 
+// ================= SERVER MODE (?server=ws://host:port) =================
+// The server owns drones, swarms, missions and the NFZ list (sim-core.js runs there). This page only renders: the map data
+// (CITY, CAC formulas) comes from the server REST API, drones from interpolated WebSocket snapshots (net-client.js).
+// If the server cannot be reached at start-up the page falls back to the local offline sim (LINK: OFFLINE SIM) and says so in the log.
+// No ?server= → NET stays null and every code path below is skipped (offline mode as before).
+let NET = null, NC = null;                              // NET = {client, rest, base, wsUrl, siteId, hello, obstacles}; NC = net-client.js module
+const netBoot = [];                                     // [lv, msg] raised before the log exists → flushed at the end of the LOG section
+const netQueue = [];                                    // server events that arrived before the UI was ready
+let netUiReady = false;
+const netEvent = fn => { if (netUiReady) fn(); else netQueue.push(fn); };
+function setLink(kind) {                                // 'online' | 'reconnecting' | 'offline'
+  const el = $('#net');
+  el.textContent = kind === 'online' ? 'SERVER ONLINE' : kind === 'reconnecting' ? 'RECONNECTING' : 'OFFLINE SIM';
+  el.className = 'tag' + (kind === 'online' ? '' : kind === 'reconnecting' ? ' warn' : ' off');
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function loadScript(src, ms = 15000) {                  // classic script (sets window.CAC)
+  return new Promise((resolve, reject) => {
+    const el = document.createElement('script');
+    const t = setTimeout(() => { el.remove(); reject(new Error('timeout')); }, ms);
+    el.onload = () => { clearTimeout(t); resolve(); };
+    el.onerror = () => { clearTimeout(t); el.remove(); reject(new Error('load failed')); };
+    el.src = src; document.head.appendChild(el);
+  });
+}
+// a server-provided script runs with this page's privileges: only load it from loopback, a private LAN address or the page's own host
+const trustedHost = h => h === location.hostname || h === 'localhost' || h === '[::1]' || /^127\./.test(h) || /^10\./.test(h) || /^192\.168\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h);
+async function netBootstrap(raw) {
+  let wsUrl, base;
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== 'ws:' && u.protocol !== 'wss:') throw new Error('use ws:// or wss://');
+    if (!u.pathname || u.pathname === '/') u.pathname = '/live';
+    wsUrl = u.href;
+  } catch (e) { netBoot.push(['warn', `SERVER: invalid ?server=${esc0(raw)} (${esc0(e.message)}) · running the offline simulation`]); return null; }
+  try { NC = await import('./net-client.js'); }
+  catch (e) { netBoot.push(['warn', `SERVER: net-client.js failed to load · running the offline simulation`]); return null; }
+  base = NC.httpBase(wsUrl);
+  let helloRes, first = true;
+  const helloP = new Promise(r => { helloRes = r; });
+  const client = NC.connect(wsUrl, {
+    onHello: m => { if (first) { first = false; helloRes(m); } else netEvent(() => log('warn', 'SERVER: reconnected · state resynchronised')); },
+    onLog: m => netEvent(() => log(['info', 'ok', 'warn', 'err', 'sys'].includes(m.lv) ? m.lv : 'info', esc0(m.msg))),
+    onRipple: m => netEvent(() => ripple(V3(+m.x || 0, +m.y || 0, +m.z || 0), m.color ?? 0xffffff)),
+    onMission: m => netEvent(() => {
+      const id = String(m.id ?? '').slice(0, 8), wp = m.wpIdx != null ? ` · WP ${+m.wpIdx + 1}${m.total ? '/' + m.total : ''}` : '';
+      log(m.status === 'ABORTED' ? 'warn' : 'sys', `MISSION ${esc0(id)}: ${esc0(m.status)}${wp}`);
+      $('#bannerTxt').textContent = `MISSION ${m.status}`; bannerEl.classList.add('show'); bannerTimer = 2.5;
+    }),
+    onStatus: st => setLink(st === 'open' ? 'online' : 'reconnecting'),
+  });
+  setLink('reconnecting');
+  const hello = await Promise.race([helloP, sleep(5000).then(() => null)]);
+  if (!hello) { client.close(); netBoot.push(['warn', `SERVER: no hello from ${esc0(wsUrl)} within 5 s · running the offline simulation`]); return null; }
+  const siteId = (hello.site && hello.site.id) || 'cac', enc = encodeURIComponent(siteId);
+  // map data: CITY (json) and the building formulas (classic script → window.CAC). Each one falls back to the local file on failure.
+  const fetchCity = async () => {
+    const res = await fetch(`${base}/api/sites/${enc}`, { signal: AbortSignal.timeout(20000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const c = await res.json();
+    if (!(c && Array.isArray(c.origin) && Array.isArray(c.base) && Number.isFinite(c.theta) && Number.isFinite(c.cell) && Number.isInteger(c.n) && c.n >= 16 && typeof c.h === 'string' && typeof c.c === 'string' && c.h && c.c)) throw new Error('payload is not a CITY');
+    const [h, k] = await Promise.all([gunzip64(c.h), gunzip64(c.c)]);
+    if (h.length !== c.n * c.n || k.length !== c.n * c.n) throw new Error('raster size does not match n');
+    return c;
+  };
+  const fetchCac = async () => {
+    const host = new URL(base).hostname;
+    if (!trustedHost(host)) throw new Error(`formulas not loaded from untrusted host ${host}`);
+    const prev = window.CAC;
+    try { await loadScript(`${base}/api/sites/${enc}/cac.js`); } catch (e) { window.CAC = prev; throw e; }
+    if (!(window.CAC && window.CAC.BUILDINGS && window.CAC.MAT)) { window.CAC = prev; throw new Error('script did not define CAC'); }
+  };
+  const [rc, rf] = await Promise.allSettled([fetchCity(), fetchCac()]);
+  if (rc.status === 'fulfilled') window.CITY = rc.value; else netBoot.push(['warn', `SERVER: CITY from ${esc0(base)}/api/sites/${esc0(siteId)} unavailable (${esc0(rc.reason && rc.reason.message)}) · using local assets/valencia-city.js`]);
+  if (rf.status === 'rejected') netBoot.push(['warn', `SERVER: formulas ${esc0(siteId)}/cac.js unavailable (${esc0(rf.reason && rf.reason.message)}) · using local cac-shapes.js`]);
+  // the first snapshot must be here before the scene is built (focus drone, fleet matrix)
+  for (let i = 0; i < 60 && !(client.latest && client.latest.drones.size && client.sample()); i++) await sleep(50);
+  if (!(client.latest && client.latest.drones.size)) { client.close(); netBoot.push(['warn', `SERVER: no drones in the first snapshot · running the offline simulation`]); return null; }
+  const obstacles = (hello.obstacles || []).map(o => ({ x: +o.x, z: +o.z, r: +o.r, h: +o.h, type: String(o.type || 'NFZ').toUpperCase(), name: String(o.name || 'NFZ'), label: String(o.label || '') }))
+    .filter(o => [o.x, o.z, o.r, o.h].every(Number.isFinite));
+  return { client, rest: NC.api(base), base, wsUrl, siteId, hello, obstacles, cityFromServer: rc.status === 'fulfilled', cacFromServer: rf.status === 'fulfilled' };
+}
+const esc0 = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+if (SERVER_PARAM) { NET = await netBootstrap(SERVER_PARAM); if (!NET) setLink('offline'); }
+
 // ================= SITE: VALENCIA (Ciutat de les Arts i les Ciències) =================
 // Real place. The Calatrava / Candela buildings are implicit formulas (cac-shapes.js) sampled into cubes;
 // the city around them is OpenStreetMap baked into two rasters (assets/valencia-city.js, tools/osm-city.py).
 // Frames · site: metres, x east / y north (origin CITY.origin) · grid: site rotated by CITY.theta around the
 // drone base, so every voxel follows the complex · scene: X east, Z south, origin = drone base, 1 unit = 2 m.
 const { BUILDINGS: CAC_B } = window.CAC, CITY = window.CITY;
-const SC = 0.5, M_PER_U = 1 / SC;                                  // scene units per metre
+// SC (scene units per metre) and M_PER_U come from sim-core.js
 const TH = CITY.theta * Math.PI / 180, CT = Math.cos(TH), ST = Math.sin(TH);
 const GC = CITY.cell, GN = CITY.n, GHALF = GN * GC / 2;          // OSM raster: GN × GN cells of GC metres
 const [BX, BY] = CITY.base, R_E = 6371008.8, COSLAT = Math.cos(CITY.origin[0] * Math.PI / 180);
@@ -642,34 +721,10 @@ const rtk = (() => {
   return { x: p.x, z: p.z, dish };
 })();
 
-// ---- geofence: big NFZ over L'Hemisfèric + one smaller temporary restriction ----
-const obstacles = [];
-{
-  const nfzMat = new THREE.MeshBasicMaterial({ color: 0xff3344, transparent: true, opacity: 0.04, side: THREE.DoubleSide, depthWrite: false });
-  const nfzLine = new THREE.LineBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0.6 });
-  const addNfz = (x, z, r, h, name, label) => {
-    const g = new THREE.CylinderGeometry(r, r, h, 64, 1, true); g.translate(0, h / 2, 0);
-    const m = new THREE.Mesh(g, nfzMat); m.position.set(x, 0, z); scene.add(m);
-    for (let yy = 0; yy <= h; yy += 20) {
-      const pts = []; for (let i = 0; i <= 72; i++) { const a = i / 72 * Math.PI * 2; pts.push(V3(x + Math.cos(a) * r, yy + 0.3, z + Math.sin(a) * r)); }
-      scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), nfzLine));
-    }
-    obstacles.push({ x, z, r, h, type: 'NFZ', name, label });
-  };
-  const hmf = landmarks.find(l => l.nfz);
-  if (hmf) addNfz(hmf.x, hmf.z, 46, 110, 'NFZ-A', "L'HEMISFÈRIC");
-  let x, z, r, ok = false, t = 0;
-  while (!ok && t++ < 300) {
-    const a = rand(0, Math.PI * 2), R = rand(120, 230);
-    x = Math.cos(a) * R; z = Math.sin(a) * R; r = rand(18, 24);
-    ok = !obstacles.some(o => Math.hypot(o.x - x, o.z - z) < o.r + r + 20) && !landmarks.some(l => Math.hypot(l.x - x, l.z - z) < l.r + r);
-  }
-  addNfz(x, z, r, 90, 'NFZ-B', 'TFR');
-}
+// (geofence list: world.obstacles, built by sim-core.js makeObstacles; its meshes are added right after the world is created, see SWARMS)
 
 // ================= BASE / PADS / MISSION MARKERS =================
 // geometría compartida; cada enjambre crea sus plataformas y marcadores (ver SWARMS)
-const PSP = 4.5;
 const padGeo = new THREE.PlaneGeometry(3.2, 3.2).rotateX(-Math.PI / 2);
 const orbitRingG1 = new THREE.RingGeometry(10, 10.8, 64).rotateX(-Math.PI / 2), orbitRingG2 = new THREE.RingGeometry(16, 16.4, 6).rotateX(-Math.PI / 2);
 const orbitBeamG = new THREE.CylinderGeometry(0.35, 0.35, 90, 8).translate(0, 45, 0);
@@ -717,22 +772,12 @@ const TL = 40;
 // temp vectors
 const _sep = V3(), _ali = V3(), _coh = V3(), _des = V3(), _acc = V3(), _d = V3(), _g = V3();
 
-let T = 0, neiSum = 0, neiCnt = 0, auto = true, lastInteraction = -99;
+let T = 0, neiSum = 0, neiCnt = 0;   // mirrors of world.T / neiSum / neiCnt, refreshed after every world.step (see simStep)
 
-class Drone {
+class Drone extends SimDrone {
   constructor(sw, i, delay) {
-    this.sw = sw; this.i = i;
-    this.pad = sw.pads[i];
-    this.target = null; this.hit = 0;                // ALPHA interceptor: hostile track being escorted
-    this.pos = this.pad.clone();
-    this.vel = V3(); this.lastAcc = V3(); this.goal = V3(0, 40, 0);
-    this.state = 'IDLE';
-    this.launchDelay = delay ?? 0.8 + i * 0.12;
-    this.battery = rand(45, 100);
-    this.drain = rand(0.32, 0.6);
-    this.link = 99; this.phase = rand(0, Math.PI * 2);
-    this.yaw = rand(0, Math.PI * 2); this.pitch = 0; this.roll = 0;
-    this.slot = 0; this.nfzT = -99; this.temp = rand(34, 40);
+    super(sw, i, delay);
+    this.pitch = 0; this.roll = 0;
 
     this.group = new THREE.Group();
     this.group.add(new THREE.Mesh(droneGeo, bodyMat));
@@ -758,10 +803,7 @@ class Drone {
     scene.add(this.trail);
   }
 
-  // BRAVO drones are BRV-xx; when BRAVO turns hostile they become unknown tracks TRK-xx
-  get id() { return (this.sw.hostile ? 'TRK' : this.sw.prefix) + '-' + pad2(this.i + 1); }
-  get padName() { return (this.sw.key === 'A' ? '' : 'B-') + 'PAD-' + pad2(this.i + 1); }
-  setState(s) { this.state = s; this.ledMat.color.setHex(s === 'ACTIVE' ? this.sw.style.led : STATE_COLOR[s]); }
+  setState(s) { super.setState(s); this.ledMat.color.setHex(s === 'ACTIVE' ? this.sw.style.led : STATE_COLOR[s]); }
   restyle() {
     const c = this.trail.geometry.attributes.color, t = this.sw.style.trail;
     for (let k = 0; k < TL; k++) { const f = Math.pow(1 - k / TL, 1.6); c.setXYZ(k, t[0] * f, t[1] * f, t[2] * f); }
@@ -775,132 +817,11 @@ class Drone {
   }
 
   update(dt, flying) {
-    switch (this.state) {
-      case 'IDLE':
-        this.launchDelay -= dt;
-        if (this.launchDelay <= 0) this.setState('LAUNCH');
-        break;
-      case 'LAUNCH':
-        this.vel.set(0, 9, 0);
-        this.pos.addScaledVector(this.vel, dt);
-        this.battery -= dt * 0.8;
-        if (this.pos.y > 24) { this.setState('ACTIVE'); this.vel.set(rand(-4, 4), 2, rand(-4, 4)); }
-        break;
-      case 'CHARGING':
-        this.vel.set(0, 0, 0);
-        this.battery = Math.min(100, this.battery + dt * 8);
-        this.ledMat.color.setHex(Math.sin(T * 4 + this.phase) > 0 ? 0x4dff9a : 0x1b5a3a);
-        if (this.battery >= 100) { this.setState('LAUNCH'); log('ok', `${this.id} recharge complete (100%) · relaunching`); }
-        break;
-      case 'LANDING':
-        this.pos.x += (this.pad.x - this.pos.x) * Math.min(1, dt * 3);
-        this.pos.z += (this.pad.z - this.pos.z) * Math.min(1, dt * 3);
-        this.vel.set(0, -6, 0);
-        this.pos.y -= 6 * dt;
-        if (this.pos.y <= this.pad.y) { this.pos.y = this.pad.y; this.setState('CHARGING'); log('ok', `${this.id} touchdown on ${this.padName} · charging`); }
-        break;
-      case 'ACTIVE':
-      case 'RTB':
-        this.flock(dt, flying);
-        this.battery -= dt * this.drain * (this.state === 'RTB' ? 0.6 : 1);
-        break;
-    }
-    this.battery = Math.max(0, this.battery);
-    if (this.state === 'ACTIVE' && this.battery < 15) {
-      this.setState('RTB');
-      log('warn', `${this.id} battery ${this.battery.toFixed(1)}% · RTB authorized → ${this.padName}`);
-    }
-    const dist = Math.hypot(this.pos.x - this.sw.base.x, this.pos.z - this.sw.base.z);
-    this.link = clamp(this.link + (clamp(100 - dist * 0.09 + Math.sin(T * 0.7 + this.phase) * 4, 40, 100) - this.link) * dt * 2, 0, 100);
-    this.temp += ((this.state === 'ACTIVE' ? 44 : this.state === 'CHARGING' ? 36 : 40) + Math.sin(T + this.phase) * 2 - this.temp) * dt * 0.2;
+    const charging = this.state === 'CHARGING';
+    super.update(dt, flying);
+    if (charging && this.state === 'CHARGING') this.ledMat.color.setHex(Math.sin(this.world.T * 4 + this.phase) > 0 ? 0x4dff9a : 0x1b5a3a);
     this.orient(dt);
     this.updateTrail();
-  }
-
-  flock(dt, flying) {
-    const rtb = this.state === 'RTB';
-    const hostile = this.sw.hostile;
-    const W = rtb ? { sep: 2.2, ali: 0, coh: 0, goal: 1.6, arrive: 25, minS: 0 } : this.target ? MODE_W.INTERCEPT : MODE_W[hostile ? 'INTRUDE' : this.sw.mode];
-    _sep.set(0, 0, 0); _ali.set(0, 0, 0); _coh.set(0, 0, 0);
-    let nA = 0, nS = 0;
-    for (const o of flying) {
-      if (o === this) continue;
-      _d.subVectors(this.pos, o.pos);
-      const dist = _d.length();
-      if (dist < R_NEI) {
-        if (!rtb && o.state === 'ACTIVE' && o.sw === this.sw) { _ali.add(o.vel); _coh.add(o.pos); nA++; }   // flock only with own swarm
-        if (dist < R_SEP && dist > 0.001) { _sep.addScaledVector(_d, 1 / (dist * dist)); nS++; }
-      }
-    }
-    if (!rtb && !hostile) { neiSum += nA; neiCnt++; }
-    _acc.set(0, 0, 0);
-    let sepW = W.sep;
-    if (rtb && Math.hypot(this.pos.x - this.pad.x, this.pos.z - this.pad.z) < 15) sepW = 0.3;
-    if (nS) { _sep.setLength(MAXS).sub(this.vel); limit(_sep, MAXF); _acc.addScaledVector(_sep, sepW); }
-    if (nA) {
-      _ali.divideScalar(nA).setLength(MAXS).sub(this.vel); limit(_ali, MAXF); _acc.addScaledVector(_ali, W.ali);
-      _coh.divideScalar(nA).sub(this.pos);
-      if (_coh.lengthSq() > 0.0001) { _coh.setLength(MAXS).sub(this.vel); limit(_coh, MAXF); _acc.addScaledVector(_coh, W.coh); }
-    }
-    // goal seeking with arrival
-    const goal = rtb ? _g.set(this.pad.x, 22, this.pad.z) : this.goal;
-    _des.subVectors(goal, this.pos);
-    const gd = _des.length();
-    if (gd > 0.01) {
-      _des.setLength(MAXS * Math.min(1, gd / W.arrive)).sub(this.vel);
-      limit(_des, MAXF); _acc.addScaledVector(_des, W.goal);
-    }
-    // geofence (NFZ cylinders) · hostile tracks ignore it (and get reported)
-    for (const o of obstacles) {
-      if (hostile) {
-        if (Math.hypot(this.pos.x - o.x, this.pos.z - o.z) < o.r && this.pos.y < o.h && T - this.nfzT > 25) {
-          this.nfzT = T; log('err', `GEOFENCE BREACH: ${this.id} inside ${o.name} (${o.label}) · alt ${(this.pos.y * M_PER_U).toFixed(0)}m`);
-        }
-        continue;
-      }
-      const dx = this.pos.x - o.x, dz = this.pos.z - o.z;
-      const d = Math.hypot(dx, dz) || 0.01;
-      const m = o.r + 14;
-      if (d < m && this.pos.y < o.h + 10) {
-        const s = (m - d) / 14;
-        _acc.x += dx / d * s * MAXF * 2.5;
-        _acc.z += dz / d * s * MAXF * 2.5;
-        if (d < o.r + 8 && T - this.nfzT > 20) {
-          this.nfzT = T;
-          if (Math.random() < 0.5) log('warn', `GEOFENCE: ${this.id} deflected from ${o.name} (${o.label}) · margin ${((d - o.r) * M_PER_U).toFixed(1)}m`);
-        }
-      }
-    }
-    // structures (city + Calatrava voxels, from the height map): climb over what is ahead, slide off walls
-    const px = this.pos.x, pz = this.pos.z, py = this.pos.y;
-    let ahead = topAt(px, pz);
-    for (const s of [0.4, 0.8, 1.3]) ahead = Math.max(ahead, topAt(px + this.vel.x * s, pz + this.vel.z * s));
-    if (ahead + 7 > py) _acc.y += Math.min(ahead + 7 - py, 12) * 6;
-    for (let k = 0; k < 8; k++) {
-      const a = k * Math.PI / 4, ox = Math.cos(a), oz = Math.sin(a), t = topAt(px + ox * 7, pz + oz * 7);
-      if (t + 4 > py) { const s = Math.min(1, (t + 4 - py) / 8) * MAXF * 1.4; _acc.x -= ox * s; _acc.z -= oz * s; }
-    }
-    // altitude & area bounds
-    if (py < 14) _acc.y += (14 - py) * 5;
-    if (py > 100) _acc.y -= (py - 100) * 5;
-    for (const ax of ['x', 'z']) {
-      const v = this.pos[ax];
-      if (Math.abs(v) > AREA) _acc[ax] -= Math.sign(v) * (Math.abs(v) - AREA) * 3;
-    }
-    limit(_acc, MAXF * 2.5);
-    this.lastAcc.copy(_acc);
-    this.vel.addScaledVector(_acc, dt);
-    const spd = this.vel.length();
-    const minS = rtb ? 0 : W.minS;
-    const vmax = this.target ? MAXS * 1.35 : hostile ? MAXS * 0.85 : MAXS;   // interceptors are faster than the tracks
-    if (spd > vmax) this.vel.multiplyScalar(vmax / spd);
-    else if (spd < minS && spd > 0.001) this.vel.multiplyScalar(minS / spd);
-    this.pos.addScaledVector(this.vel, dt);
-
-    if (rtb && Math.hypot(this.pos.x - this.pad.x, this.pos.z - this.pad.z) < 2.5) {
-      this.setState('LANDING');
-      log('info', `${this.id} over ${this.padName} · initiating auto-land`);
-    }
   }
 
   orient(dt) {
@@ -916,7 +837,7 @@ class Drone {
     this.roll += (tr - this.roll) * Math.min(1, dt * 5);
     this.group.position.copy(this.pos);
     this.group.rotation.set(this.pitch, this.yaw, this.roll, 'YXZ');
-    this.strobeMat.color.setHex(((T * 1.3 + this.phase) % 1) < 0.08 ? 0xff2233 : 0x220305);
+    this.strobeMat.color.setHex(((this.world.T * 1.3 + this.phase) % 1) < 0.08 ? 0xff2233 : 0x220305);
   }
 
   updateTrail() {
@@ -931,6 +852,7 @@ class Drone {
     a.needsUpdate = true;
   }
 }
+
 // ================= SWARMS =================
 // ALPHA = our fleet (base in the Túria gardens). BRAVO = optional second fleet (swarm2=N, off by default) with its own
 // base NE of the Oceanogràfic and its own missions. role=hostile turns BRAVO into unknown intruders (TRK-xx) that
@@ -940,26 +862,16 @@ const SW_STYLE = {
   B: { led: 0xffa040, trail: [1.0, 0.6, 0.22], route: 0xff9f40, base: 0xffa040, pad: 0x6e4a12, mark: 0xffd060, lead: 0xffa040, scan: 0xffa040, css: '255,159,64', dot: '#ffa040' },
   H: { led: 0xff3344, trail: [1.0, 0.18, 0.24], route: 0xff3344, base: 0xff3344, pad: 0x6e1420, mark: 0xff3344, lead: 0xff3344, scan: 0xff3344, css: '255,77,94', dot: '#ff4d5e' },
 };
-const BASE_B = V3(188, 0, 128);          // open ground NE of the Oceanogràfic (searched in the OSM raster: no buildings, water or roads)
 const bannerEl = $('#banner');
 let bannerTimer = 0;
-const safeAlt = (x, z, y) => Math.min(95, Math.max(y, topNear(x, z, 10) + 12));
-function outOfNfz(p) {
-  for (const o of obstacles) if (o.type === 'NFZ') {
-    const dx = p.x - o.x, dz = p.z - o.z, d = Math.hypot(dx, dz) || 1;
-    if (d < o.r + 18) { p.x = o.x + dx / d * (o.r + 18); p.z = o.z + dz / d * (o.r + 18); }
-  }
-  return p;
-}
+// safeAlt / outOfNfz / BASE_B live in sim-core.js; these aliases keep the old call sites
+const safeAlt = (x, z, y) => world.safeAlt(x, z, y);
+const outOfNfz = p => world.outOfNfz(p);
 
-class Swarm {
-  constructor(key, name, prefix, base) {
-    Object.assign(this, {
-      key, name, prefix, base, hostile: false, drones: [], pads: [], baseR: 10, padMesh: null, baseRing: null, active: [],
-      mode: 'PATROL', modeTimer: key === 'A' ? 0 : -25, lastAssign: -99, lastActiveCount: -1, orbitFromClick: false,
-      waypoints: [], wpIdx: 0, routeMats: [], orbitCenter: V3(), orbitR0: 36, orbitAlt0: 30,
-      leader: V3(), leaderVel: V3(1, 0, 0), sweepZ: 0, ph: key === 'A' ? 0 : 2.1, objectives: [], objT: -99, threatT: -99,
-    });
+class Swarm extends SimSwarm {
+  constructor(world, key, name, prefix, base) {
+    super(world, key, name, prefix, base);
+    Object.assign(this, { padMesh: null, baseRing: null, routeMats: [] });
     this.padMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.75 });
     this.ringMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.7 });
     this.markMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.8, side: THREE.DoubleSide });
@@ -978,7 +890,6 @@ class Swarm {
     this.restyle();
   }
   get style() { return SW_STYLE[this.hostile ? 'H' : this.key]; }
-  get modeLabel() { return this.hostile ? 'INTRUDE' : this.mode; }
   restyle() {
     const s = this.style;
     this.padMat.color.setHex(s.pad); this.ringMat.color.setHex(s.base);
@@ -987,11 +898,9 @@ class Swarm {
     this.drones.forEach(d => d.restyle());
     if (this.waypoints.length) this.rebuildRoute();
   }
-  buildPads(n) {
-    const cols = Math.max(1, Math.ceil(Math.sqrt(n))), rows = Math.max(1, Math.ceil(n / cols)), b = this.base;
-    this.pads.length = 0;
-    for (let i = 0; i < n; i++) this.pads.push(V3(b.x + (i % cols - (cols - 1) / 2) * PSP, 0.6, b.z + (Math.floor(i / cols) - (rows - 1) / 2) * PSP));
-    this.baseR = Math.max(cols, rows) * PSP * 0.75 + 4;
+  computePads(n) {                                  // pad positions from the core; here the pad meshes
+    super.computePads(n);
+    const b = this.base;
     if (this.padMesh) { scene.remove(this.padMesh); this.padMesh.dispose(); this.padMesh = null; }
     if (this.baseRing) { scene.remove(this.baseRing); this.baseRing.geometry.dispose(); this.baseRing = null; }
     if (!n) return;
@@ -1001,31 +910,6 @@ class Swarm {
     scene.add(this.padMesh);
     this.baseRing = new THREE.Mesh(new THREE.RingGeometry(this.baseR, this.baseR + 0.7, 72).rotateX(-Math.PI / 2), this.ringMat);
     this.baseRing.position.set(b.x, 0.1, b.z); scene.add(this.baseRing);
-  }
-  setCount(n, delay0 = 0.8) {
-    const prev = this.drones.length;
-    while (this.drones.length > n) this.drones.pop().dispose();
-    this.buildPads(n);
-    this.drones.forEach(d => { d.pad = this.pads[d.i]; if (d.state === 'IDLE' || d.state === 'CHARGING') d.pos.copy(d.pad); });
-    for (let i = this.drones.length; i < n; i++) this.drones.push(new Drone(this, i, delay0 + (i - prev) * (delay0 > 0.5 ? 0.12 : 0.08)));
-    this.lastActiveCount = -1;
-    refreshDrones();
-  }
-  dispose() {
-    this.setCount(0);
-    scene.remove(...this.markers);
-    [this.padMat, this.ringMat, this.markMat, this.beamMat, this.leadMat, this.bandMat, this.wallMat].forEach(m => m.dispose());
-  }
-  genRoute() {
-    this.waypoints = [];
-    const n = 6, a0 = rand(0, Math.PI * 2);
-    for (let i = 0; i < n; i++) {
-      const a = a0 + i / n * Math.PI * 2 + rand(-0.3, 0.3), r = rand(80, AREA - 30);
-      const w = outOfNfz(V3(Math.cos(a) * r, 0, Math.sin(a) * r));
-      w.y = safeAlt(w.x, w.z, rand(30, 52) + (this.key === 'B' ? 10 : 0));
-      this.waypoints.push(w);
-    }
-    this.wpIdx = 0; this.rebuildRoute();
   }
   rebuildRoute() {
     const g = this.routeGroup, col = this.style.route;
@@ -1044,127 +928,15 @@ class Swarm {
       g.add(beam, top, ring);
     });
   }
-  orbitLandmark(l) {
-    this.orbitCenter.set(l.x, 0, l.z);
-    this.orbitR0 = clamp(l.r + 12, 30, 90) + (this.key === 'B' ? 8 : 0);
-    this.orbitAlt0 = l.id === 'assut' ? l.h + 8 : clamp(l.h * 0.6, 26, 70);   // bridge: stay above the cable fan
+  dispose() {
+    super.dispose();
+    scene.remove(...this.markers);
+    [this.padMat, this.ringMat, this.markMat, this.beamMat, this.leadMat, this.bandMat, this.wallMat].forEach(m => m.dispose());
   }
-  orbitPoint(p) {                                 // operator click: snap to a landmark if it was clicked
-    const l = orbitTargets.find(l => Math.hypot(l.x - p.x, l.z - p.z) < Math.max(l.r, 16));
-    if (l) { this.orbitLandmark(l); return l.name; }
-    this.orbitCenter.set(p.x, 0, p.z); this.orbitR0 = 36; this.orbitAlt0 = Math.max(30, topNear(p.x, p.z, 20) + 10);
-    return null;
-  }
-  setMode(m, why) {
-    if (this.hostile) return;
-    if (m !== this.mode) {
-      this.mode = m;
-      if (m === 'ORBIT' && !this.orbitFromClick) {
-        const other = this === SA ? SB : SA, busy = other && !other.hostile && other.mode === 'ORBIT' ? other.orbitCenter : null;
-        const opts = orbitTargets.filter(t => !busy || Math.hypot(t.x - busy.x, t.z - busy.z) > 1);
-        const b = pick(opts.length ? opts : orbitTargets); this.orbitLandmark(b);
-        why = why || `target ${b.name}`;
-      }
-      if (m === 'PATROL') this.genRoute();
-      this.lastAssign = -99;
-      log('sys', `MISSION: retasking ${SB ? this.name : 'swarm'} → ${m}${why ? ' · ' + why : ''}`);
-      $('#bannerTxt').textContent = SB ? `${this.name} · ${m}` : m;
-      bannerEl.classList.add('show'); bannerTimer = 2.5;
-      updateModeLabels(); syncCtrl();
-    }
-    this.orbitFromClick = false;
-    this.modeTimer = 0;
-  }
-  assignSlots(active) {
-    const arr = active.slice(), oc = this.orbitCenter, mode = this.mode;
-    if (mode === 'SCAN') arr.sort((a, b) => a.pos.x - b.pos.x);
-    else if (mode === 'ORBIT') arr.sort((a, b) => Math.atan2(a.pos.z - oc.z, a.pos.x - oc.x) - Math.atan2(b.pos.z - oc.z, b.pos.x - oc.x));
-    else if (mode === 'FORMATION') arr.sort((a, b) => a.pos.distanceToSquared(this.leader) - b.pos.distanceToSquared(this.leader));
-    arr.forEach((d, k) => d.slot = k);
-    this.lastAssign = T; this.lastActiveCount = active.length;
-  }
-  computeGoals(active) {
-    if (this.hostile) return this.intrudeGoals(active);
-    const n = active.length || 1, ph = this.ph, leader = this.leader, lv = this.leaderVel, oc = this.orbitCenter;
-    // formation leader path (Lissajous; BRAVO runs out of phase so the two swarms do not overlap)
-    const lx = (AREA - 70) * Math.sin(T * 0.05 + ph), lz = (AREA - 100) * Math.sin(T * 0.08 + ph * 1.3);
-    lv.set(lx - leader.x, 0, lz - leader.z); leader.set(lx, this.key === 'A' ? 72 : 84, lz);
-    if (lv.lengthSq() < 1e-8) lv.set(1, 0, 0);
-    lv.normalize();
-    this.sweepZ = (AREA - 40) * Math.sin(T * 0.12 + ph);
-    const cols = 8;
-    for (const d of active) {
-      const k = d.slot;
-      switch (this.mode) {
-        case 'PATROL': {
-          const w = this.waypoints[this.wpIdx];
-          d.goal.set(w.x + Math.sin(d.phase) * 12, w.y + Math.cos(d.phase * 2) * 6, w.z + Math.cos(d.phase) * 12);
-          break;
-        }
-        case 'ORBIT': {
-          const ring = k % 3, R = this.orbitR0 + ring * 14, alt = this.orbitAlt0 + ring * 12;
-          const a = T * (0.32 - ring * 0.07) * (ring === 1 ? -1 : 1) + (k / n) * Math.PI * 2;
-          d.goal.set(oc.x + Math.cos(a) * R, alt + Math.sin(T + k) * 2, oc.z + Math.sin(a) * R);
-          break;
-        }
-        case 'FORMATION': {
-          const col = k % cols, row = Math.floor(k / cols), c = col - (cols - 1) / 2;
-          const back = row * 7 + Math.abs(c) * 4;
-          // right vector = (-fz, 0, fx) with forward (fx, 0, fz)
-          d.goal.set(leader.x + -lv.z * c * 8 - lv.x * back, leader.y + row * 1.5, leader.z + lv.x * c * 8 - lv.z * back);
-          break;
-        }
-        case 'SCAN': {
-          d.goal.set(-AREA + 20 + k * ((2 * AREA - 40) / Math.max(1, n - 1)), (this.key === 'A' ? 58 : 76) + (k % 2) * 9, this.sweepZ);
-          break;
-        }
-      }
-      // never aim inside a building: lift the goal above whatever stands there
-      if (this.mode !== 'ORBIT') d.goal.y = safeAlt(d.goal.x, d.goal.z, d.goal.y);
-    }
-  }
-  // hostile: three loose groups, each heading for a landmark (NFZ included) or ALPHA's base, circling it, then moving on
-  intrudeGoals(active) {
-    if (T > this.objT) {
-      const tg = [...landmarks, { x: SA.base.x, z: SA.base.z, r: 24, name: 'ALPHA base' }];
-      this.objectives = [0, 1, 2].map(() => pick(tg)); this.objT = T + rand(30, 50);
-    }
-    for (const d of active) {
-      const o = this.objectives[d.i % 3], a = T * 0.3 + d.phase * 2, R = (o.r || 20) * 0.5 + 12;
-      d.goal.set(o.x + Math.cos(a) * R, 0, o.z + Math.sin(a) * R);
-      d.goal.y = safeAlt(d.goal.x, d.goal.z, 30 + (d.i % 4) * 7);
-    }
-  }
-  // per-swarm simulation step (before the drones move)
-  step(dt) {
-    this.modeTimer += dt;
-    if (!this.hostile && auto && this.modeTimer > 50 && T - lastInteraction > 20) {
-      let next = MODES[(MODES.indexOf(this.mode) + 1) % MODES.length];
-      const other = this === SA ? SB : SA;            // independent missions: avoid flying the other swarm's mode
-      if (other && !other.hostile && next === other.mode) next = MODES[(MODES.indexOf(next) + 1) % MODES.length];
-      this.setMode(next, 'auto-tasking');
-    }
-    const active = this.active = this.drones.filter(d => d.state === 'ACTIVE');
-    const tasked = active.filter(d => !d.target);   // interceptors are steered by intercept()
-    if (T - this.lastAssign > 2 || tasked.length !== this.lastActiveCount) this.assignSlots(tasked);
-    this.computeGoals(tasked);
-    if (!this.hostile && this.mode === 'PATROL' && tasked.length) {
-      _p.set(0, 0, 0); tasked.forEach(d => _p.add(d.pos)); _p.divideScalar(tasked.length);
-      const w = this.waypoints[this.wpIdx], who = SB ? this.name + ' ' : '';
-      if (_p.distanceTo(w) < 30) {
-        log('ok', `NAV: ${who}WP-${this.wpIdx + 1} reached · ${tasked.length} units in formation`);
-        ripple(w, this.style.route);
-        if (++this.wpIdx >= this.waypoints.length) {
-          this.genRoute();
-          log('info', `PLANNER: ${who}new patrol route generated · ${this.waypoints.length} WPs · ${(this.waypoints.reduce((s, w, i) => s + w.distanceTo(this.waypoints[(i + 1) % this.waypoints.length]), 0) * M_PER_U / 1000).toFixed(2)} km`);
-        }
-      }
-    }
-    return active;
-  }
+
   visuals() {
     const m = this.modeLabel, on = this.drones.length > 0;
-    this.routeGroup.visible = on && m === 'PATROL';
+    this.routeGroup.visible = on && (m === 'PATROL' || m === 'MISSION');
     this.routeMats.forEach((mt, i) => { if (i) mt.opacity = i - 1 === this.wpIdx ? 0.6 + Math.sin(T * 6) * 0.3 : 0.25; });
     this.orbitMarker.visible = on && m === 'ORBIT';
     this.orbitMarker.position.set(this.orbitCenter.x, 0.3, this.orbitCenter.z);
@@ -1178,99 +950,211 @@ class Swarm {
   }
 }
 
-let SB = null, drones = [];
-const SA = new Swarm('A', 'ALPHA', 'UAV', V3(0, 0, 0));
-let SEL = SA;                                       // swarm that keys / clicks / mode= / orbit= act on
-function refreshDrones() { drones = SB ? SA.drones.concat(SB.drones) : SA.drones.slice(); }
-SA.setCount(N);
-const friendlyActive = () => SB && !SB.hostile ? SA.active.concat(SB.active) : SA.active;
+// ---- the simulation world (sim-core.js): drones + swarms + NFZ list + intercepts. index.html only adds meshes and DOM ----
+const world = new SimWorld({
+  topAt, topNear, landmarks, seed: SEED, n: NET ? 0 : N, obstacles: NET ? NET.obstacles : undefined, sceneToGeo, DroneClass: Drone, SwarmClass: Swarm,
+  hooks: {
+    log: (lv, msg) => log(lv, msg),
+    onRipple: (p, color) => ripple(p, color),
+    onRouteChange: sw => sw.rebuildRoute(),
+    onModeChange: (sw, m) => {
+      $('#bannerTxt').textContent = world.swarms.B ? `${sw.name} · ${m}` : m;
+      bannerEl.classList.add('show'); bannerTimer = 2.5;
+      updateModeLabels(); syncCtrl();
+    },
+    // swarm list / selection / count changed inside the core (setSwarm2, setRole, select, setDroneCount, setAuto)
+    onSwarmChange: ev => {
+      if (ev.type === 'swarm2-removing') { if (focus && focus.sw === ev.removed) setFocus(world.swarms.A.drones[0]); return; }
+      syncWorld();
+      if (ev.type === 'sel') { updateModeLabels(); syncCtrl(); }
+      else if (ev.type === 'auto') $('#auto').classList.toggle('off', !world.auto);
+      else if (ev.type === 'count') { if (!drones.includes(focus)) setFocus(drones[0]); buildFleet(); updateUrl(); }
+      else { N2 = SB ? SB.drones.length : 0; buildFleet(); updateModeLabels(); syncCtrl(); updateUrl(); }   // swarm2 / role
+    },
+  },
+});
+const SA = world.swarms.A;
+let SB = null, SEL = SA, drones = world.drones;       // mirrors of world.swarms.B / world.sel / world.drones
+function syncWorld() { SB = world.swarms.B; SEL = world.sel; drones = world.drones; N = SA.drones.length; }
+
+// geofence meshes (the list itself: world.obstacles from sim-core.js makeObstacles)
+const obstacles = world.obstacles;
+{
+  const nfzMat = new THREE.MeshBasicMaterial({ color: 0xff3344, transparent: true, opacity: 0.04, side: THREE.DoubleSide, depthWrite: false });
+  const nfzLine = new THREE.LineBasicMaterial({ color: 0xff4d5e, transparent: true, opacity: 0.6 });
+  for (const { x, z, r, h } of obstacles) {
+    const g = new THREE.CylinderGeometry(r, r, h, 64, 1, true); g.translate(0, h / 2, 0);
+    const m = new THREE.Mesh(g, nfzMat); m.position.set(x, 0, z); scene.add(m);
+    for (let yy = 0; yy <= h; yy += 20) {
+      const pts = []; for (let i = 0; i <= 72; i++) { const a = i / 72 * Math.PI * 2; pts.push(V3(x + Math.cos(a) * r, yy + 0.3, z + Math.sin(a) * r)); }
+      scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), nfzLine));
+    }
+  }
+}
+// ---- server mode: snapshot → scene (only used when NET is set; see SERVER MODE at the top) ----
+// Drone / Swarm objects are mirrors: pose, state and markers come from the snapshot, orient() + trails still run locally.
+const netDrones = new Map();                          // 'A:0' → Drone (swarm key + index parsed from the id: UAV-01 → A:0)
+const NET_IDX = /(\d+)$/;
+const extMat = new THREE.MeshStandardMaterial({ color: 0x3a1d33, metalness: 0.7, roughness: 0.35, emissive: 0x3a0f33 });
+const extLedMat = new THREE.MeshBasicMaterial({ color: 0xff6ee0 });
+const extMarkers = new Map();                         // ext id → {group, sprite, label, tx, ty, tz, yaw, fresh}
+function mkLabel(text) {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 64;
+  const g = c.getContext('2d'); g.font = 'bold 34px monospace'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillStyle = '#ff6ee0'; g.fillText(text, 128, 32);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false, fog: false }));
+  sp.scale.set(16, 4, 1); sp.position.y = 5;
+  return sp;
+}
+function netExt(rows, dt) {                           // rows: [id, x, y, z, heading°, battery, state]
+  const seen = new Set();
+  for (const r of rows || []) {
+    const id = String(r[0]); seen.add(id);
+    let e = extMarkers.get(id);
+    if (!e) {
+      const group = new THREE.Group(), label = /^EXT-/i.test(id) ? id : 'EXT-' + id;
+      group.add(new THREE.Mesh(droneGeo, extMat), new THREE.Mesh(rotorGeo, rotorMat));
+      const led = new THREE.Mesh(ledGeo, extLedMat); led.position.set(0, 0.1, 1.2); group.add(led);
+      group.scale.setScalar(1.25);
+      const sprite = mkLabel(label); group.add(sprite);
+      sprite.scale.set(16 / 1.25, 4 / 1.25, 1); sprite.position.y = 5 / 1.25;
+      group.position.set(r[1], r[2], r[3]); scene.add(group);
+      e = { group, sprite, label, yaw: 0, fresh: true, x: r[1], z: r[3] }; extMarkers.set(id, e);
+    }
+    const k = e.fresh ? 1 : 1 - Math.exp(-dt * 15), yaw = Math.PI - (+r[4] || 0) * Math.PI / 180;   // compass heading (0 = north = −z) → model yaw
+    e.fresh = false;
+    e.group.position.x += (r[1] - e.group.position.x) * k; e.group.position.y += (r[2] - e.group.position.y) * k; e.group.position.z += (r[3] - e.group.position.z) * k;
+    e.yaw = lerpAngle(e.yaw, yaw, k); e.group.rotation.y = e.yaw;
+    e.x = e.group.position.x; e.z = e.group.position.z;
+  }
+  for (const [id, e] of extMarkers) if (!seen.has(id)) {
+    scene.remove(e.group); e.sprite.material.map.dispose(); e.sprite.material.dispose(); extMarkers.delete(id);
+  }
+}
+function netTrailFill(d) {                            // new drone: trail starts at its position, not at the pad
+  const a = d.trail.geometry.attributes.position, arr = a.array;
+  for (let k = 0; k < TL; k++) { arr[k * 3] = d.pos.x; arr[k * 3 + 1] = d.pos.y; arr[k * 3 + 2] = d.pos.z; }
+  a.needsUpdate = true;
+}
+function netPose(d, r, dt) {
+  d.pos.set(r.x, r.y, r.z); d.vel.set(r.vx, r.vy, r.vz); d.lastAcc.set(r.ax, 0, r.az);
+  d.battery = r.battery; d.link = r.link; d.temp = r.temp;
+  if (d.state !== r.state && STATE_COLOR[r.state] !== undefined) d.setState(r.state);
+  if (d.state === 'CHARGING') d.ledMat.color.setHex(Math.sin(T * 4 + d.phase) > 0 ? 0x4dff9a : 0x1b5a3a);
+  d.orient(dt); d.updateTrail();
+}
+// markers of one swarm (route, orbit ring, leader, scan band) from snap.swarms[k]
+function netSwarm(sw, src, dt, quiet) {
+  if (src !== sw._netSrc) {
+    const firstSeen = sw._netSrc === undefined; sw._netSrc = src;
+    if (!!src.hostile !== sw.hostile) {
+      sw.hostile = !!src.hostile; sw.restyle();
+      if (!quiet) world.hooks.onSwarmChange({ type: 'role' });
+    }
+    if (src.mode && src.mode !== sw.mode) {
+      sw.mode = src.mode;
+      if (!quiet && !firstSeen) {
+        $('#bannerTxt').textContent = world.swarms.B ? `${sw.name} · ${sw.modeLabel}` : sw.modeLabel;
+        bannerEl.classList.add('show'); bannerTimer = 2.5; updateModeLabels(); syncCtrl();
+      }
+    }
+    sw.wpIdx = src.wpIdx | 0;
+    const wps = src.waypoints || [], key = JSON.stringify(wps);
+    if (key !== sw._netWp) {
+      sw._netWp = key; sw.waypoints = wps.map(w => V3(w[0], w[1], w[2]));
+      if (sw.waypoints.length) sw.rebuildRoute(); else { sw.routeGroup.clear(); sw.routeMats = []; }
+    }
+    const oc = src.orbitCenter || [0, 0];
+    sw.orbitCenter.set(oc[0], 0, oc[1]); sw.orbitR0 = src.orbitR0 ?? sw.orbitR0; sw.orbitAlt0 = src.orbitAlt0 ?? sw.orbitAlt0;
+    const l = src.leader || [0, 0, 0];
+    if (!sw._lead) { sw._lead = V3(); sw.leader.set(l[0], l[1], l[2]); sw.sweepZ = src.sweepZ || 0; }
+    sw._lead.set(l[0], l[1], l[2]); sw._sweepT = src.sweepZ || 0;
+  }
+  const k = 1 - Math.exp(-dt * 15);                      // leader / scan line move at 10 Hz in the snapshot: smooth locally
+  if (sw._lead) { sw.leader.lerp(sw._lead, k); sw.sweepZ += (sw._sweepT - sw.sweepZ) * k; }
+}
+function netShape(quiet) {                              // drone / swarm list changed
+  world.refreshDrones(); syncWorld();
+  if (quiet) return;
+  if (!drones.includes(focus)) setFocus(drones[0]);
+  buildFleet(); updateModeLabels(); syncCtrl(); updateUrl();
+}
+function netApply(s, dt, quiet) {
+  let shape = false;
+  const sk = s.swarms || {};
+  if (sk.B && !world.swarms.B) { world.swarms.B = new Swarm(world, 'B', 'BRAVO', 'BRV', BASE_B.clone()); shape = true; }
+  else if (!sk.B && world.swarms.B) {
+    const B = world.swarms.B;
+    world.hooks.onSwarmChange({ type: 'swarm2-removing', removed: B });
+    for (const [key, d] of netDrones) if (d.sw === B) netDrones.delete(key);
+    B.dispose(); world.swarms.B = null; world.sel = world.swarms.A; shape = true;
+  }
+  for (const k of ['A', 'B']) { const sw = world.swarms[k]; if (sw && sk[k]) netSwarm(sw, sk[k], dt, quiet); }
+  // pads: one per index up to the highest id of each swarm (rebuilt only when that changes)
+  const maxI = { A: -1, B: -1 };
+  for (const [id, r] of s.drones) { const m = NET_IDX.exec(id); if (m && world.swarms[r.swarm]) maxI[r.swarm] = Math.max(maxI[r.swarm], +m[1] - 1); }
+  for (const k of ['A', 'B']) {
+    const sw = world.swarms[k]; if (!sw || sw.pads.length === maxI[k] + 1) continue;
+    sw.computePads(maxI[k] + 1); sw.drones.forEach(d => { d.pad = sw.pads[d.i]; }); shape = true;
+  }
+  const seen = new Set();
+  for (const [id, r] of s.drones) {
+    const sw = world.swarms[r.swarm], m = NET_IDX.exec(id); if (!sw || !m) continue;
+    const i = +m[1] - 1, key = r.swarm + ':' + i;
+    let d = netDrones.get(key);
+    if (!d) {
+      d = new Drone(sw, i, 0); d.pos.set(r.x, r.y, r.z); d.yaw = Math.atan2(r.vx, r.vz); d.setState(STATE_COLOR[r.state] !== undefined ? r.state : 'IDLE');
+      netTrailFill(d); sw.drones.push(d); netDrones.set(key, d); shape = true;
+    }
+    seen.add(key);
+    netPose(d, r, dt);
+  }
+  if (netDrones.size !== seen.size) {
+    for (const [key, d] of netDrones) if (!seen.has(key)) {
+      const a = d.sw.drones.indexOf(d); if (a >= 0) d.sw.drones.splice(a, 1);
+      d.dispose(); netDrones.delete(key); shape = true;
+    }
+  }
+  if (shape) { for (const k of ['A', 'B']) if (world.swarms[k]) world.swarms[k].drones.sort((a, b) => a.i - b.i); netShape(quiet); }
+  for (const k of ['A', 'B']) { const sw = world.swarms[k]; if (sw) sw.active = sw.drones.filter(d => d.state === 'ACTIVE'); }
+  netExt(s.ext, dt);
+}
+function netStep(dt) {                                  // replaces world.step in server mode
+  T += dt; world.T = T;
+  const s = NET.client.sample(performance.now());
+  if (s) netApply(s, dt, false);
+}
+function netNeiAvg() {                                  // mean neighbours within R_NEI of the active drones (cheap: only when the chatter shows it)
+  const act = drones.filter(d => d.state === 'ACTIVE'); if (!act.length) return 0;
+  let n = 0; for (const a of act) for (const b of act) if (a !== b && a.pos.distanceToSquared(b.pos) < R_NEI * R_NEI) n++;
+  return n / act.length;
+}
+// run a console-style log from async code (after runCmd has already returned)
+function asConsole(fn) { const p = toConsole; toConsole = true; try { fn(); } finally { toConsole = p; } }
+// operator commands in server mode: send to the server, print the reply in the console
+async function netCmd(name, args) {
+  const r = await NET.client.sendCmd(name, args);
+  asConsole(() => log(r.ok ? 'ok' : 'err', esc(`${name}${args.length ? '=' + args.join(',') : ''}: ${r.msg}`)));
+  if (r.ok && name === 'auto') { world.auto = args[0] === 'on'; $('#auto').classList.toggle('off', !world.auto); }
+  return r;
+}
+const netDenied = what => asConsole(() => log('err', `${what}: not available in server mode · the server accepts mode, orbit, drones, auto (+ mission)`));
+if (NET) netApply(NET.client.sample(performance.now()), 0, true);     // first snapshot → drones exist before focus / fleet matrix are built
+
+const friendlyActive = () => world.friendlyActive();
 function updateModeLabels() {
   const two = !!SB;
   $('#mode').textContent = (two ? (SEL === SA ? '▸A ' : 'A ') : '') + SA.mode;
   $('#mode2').innerHTML = two ? ` · ${SEL === SB ? '▸' : ''}B <b style="color:${SB.style.dot}">${SB.modeLabel}</b>` : '';
 }
-function selectSwarm(s, quiet) {
-  if (s === SB && (!SB || SB.hostile)) { if (!quiet) log('err', SB ? 'BRAVO is hostile · not under our command' : 'no second swarm · use swarm2=N'); return; }
-  SEL = s; updateModeLabels(); syncCtrl();
-  if (!quiet) log('sys', `OPERATOR: commands → ${SEL.name} (${SEL.mode})`);
-}
-// swarm2=N: bring BRAVO online with N drones (0 = recall and remove it)
-function setSwarm2(n, quiet) {
-  n = clamp(Math.round(n), 0, 80);
-  if (!n) {
-    if (!SB) { log('info', 'BRAVO: offline · usage swarm2=N (1-80)'); return; }
-    SA.drones.forEach(d => { d.target = null; d.hit = 0; });
-    if (focus && focus.sw === SB) setFocus(SA.drones[0]);
-    SB.dispose(); SB = null; SEL = SA; N2 = 0;
-    refreshDrones(); buildFleet(); updateModeLabels(); syncCtrl(); updateUrl();
-    log('warn', 'BRAVO: fleet recalled · second swarm offline');
-    return;
-  }
-  const fresh = !SB;
-  if (fresh) {
-    SB = new Swarm('B', 'BRAVO', 'BRV', BASE_B.clone());
-    SB.genRoute(); SB.mode = SA.mode === 'SCAN' ? 'ORBIT' : 'SCAN';
-    if (SB.mode === 'ORBIT') SB.orbitLandmark(pick(orbitTargets));
-  }
-  SB.setCount(n, fresh ? 0.5 : 0.3); N2 = n;
-  buildFleet(); updateModeLabels(); syncCtrl(); updateUrl();
-  if (!quiet) {
-    const [la, lo] = sceneToGeo(SB.base.x, SB.base.z);
-    log('ok', fresh ? `BRAVO: second swarm online · ${n} airframes · base ${la.toFixed(5)}, ${lo.toFixed(5)} (Oceanogràfic) · mission ${SB.mode}`
-                    : `BRAVO: swarm size ${n} airframes`);
-  }
-}
-// role=hostile|friendly: BRAVO as intruders (ALPHA intercepts) or as a second friendly fleet
-function setRole(r, quiet) {
-  if (!SB) { log('err', 'no second swarm · use swarm2=N first'); return; }
-  const h = r === 'hostile';
-  if (h === SB.hostile) { if (!quiet) log('info', `BRAVO role: ${h ? 'hostile' : 'friendly'}`); return; }
-  SB.hostile = h; SB.objT = -99; SB.threatT = -99;
-  SB.restyle();
-  SA.drones.forEach(d => { d.target = null; d.hit = 0; });
-  if (h && SEL === SB) SEL = SA;
-  if (!h) SB.lastAssign = -99;
-  buildFleet(); updateModeLabels(); syncCtrl(); updateUrl();
-  if (!quiet) h ? log('err', `THREAT: BRAVO squawk lost · ${SB.drones.length} contacts reclassified HOSTILE (TRK) · ALPHA cleared to intercept`)
-                : log('ok', 'BRAVO: IFF restored · contacts reclassified FRIENDLY · intercepts cancelled');
-}
-// ALPHA vs hostile BRAVO: pair each airborne track with the nearest free ALPHA drone (≤ 40 % of ALPHA); staying
-// within 20 m of it for 3 s forces the intruder down (RTB to its own base, where it recharges and comes back)
-function intercept(dt) {
-  if (!SB || !SB.hostile) return;
-  const tracks = SB.drones.filter(h => h.state === 'ACTIVE');
-  for (const d of SA.drones) if (d.target && (d.target.state !== 'ACTIVE' || d.state !== 'ACTIVE')) { d.target = null; d.hit = 0; }
-  if (tracks.length && T - SB.threatT > 25) {
-    SB.threatT = T;
-    const c = tracks.reduce((p, h) => p.add(h.pos), V3()).divideScalar(tracks.length);
-    const brg = Math.round((Math.atan2(c.x, -c.z) * 180 / Math.PI + 360) % 360);
-    log('err', `THREAT: ${tracks.length} hostile UAS airborne · bearing ${brg}° · range ${(Math.hypot(c.x, c.z) * M_PER_U).toFixed(0)}m from base`);
-  }
-  const max = Math.ceil(SA.active.length * 0.4);
-  let used = SA.drones.filter(d => d.target).length;
-  for (const h of tracks) {
-    if (used >= max) break;
-    if (SA.drones.some(d => d.target === h)) continue;
-    let best = null, bd = 1e12;
-    for (const d of SA.active) if (!d.target && d.battery > 30) { const dd = d.pos.distanceToSquared(h.pos); if (dd < bd) { bd = dd; best = d; } }
-    if (!best) break;
-    best.target = h; best.hit = 0; used++;
-    log('warn', `INTERCEPT: ${best.id} vectored to ${h.id} · range ${(Math.sqrt(bd) * M_PER_U).toFixed(0)}m`);
-  }
-  for (const d of SA.drones) if (d.target) {
-    const h = d.target, v = h.vel.lengthSq() > 0.01 ? _g.copy(h.vel).normalize() : _g.set(0, 0, 0);
-    d.goal.set(h.pos.x - v.x * 6, h.pos.y + 3, h.pos.z - v.z * 6);   // sit just behind and above the intruder
-    if (d.pos.distanceTo(h.pos) < 10) {
-      d.hit += dt;
-      if (d.hit > 3) {
-        log('ok', `NEUTRALIZED: ${h.id} escorted down by ${d.id} · forced RTB to hostile base`);
-        ripple(h.pos, 0xff3344);
-        h.battery = Math.min(h.battery, 6); h.setState('RTB');
-        d.target = null; d.hit = 0;
-      }
-    } else d.hit = Math.max(0, d.hit - dt * 0.5);
-  }
-}
+// selection / second swarm / role: logic in the core (world.select / setSwarm2 / setRole), DOM through hooks.onSwarmChange
+// (server mode: the server does not take these commands yet → netDenied)
+function selectSwarm(s, quiet) { if (NET) return netDenied('sel'); world.select(s, quiet); }
+function setSwarm2(n, quiet) { if (NET) return netDenied('swarm2'); world.setSwarm2(n, quiet); }     // n = 0 recalls BRAVO
+function setRole(r, quiet) { if (NET) return netDenied('role'); world.setRole(r, quiet); }
+// operator mode change (buttons, keys 1-4, console): local swarm offline, `mode` command to the server in server mode
+const opMode = m => NET ? netCmd('mode', [m.toLowerCase()]) : SEL.setMode(m, 'operator command');
+
 // red lines interceptor → track
 const icptLines = new THREE.LineSegments(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(160 * 6), 3)),
   new THREE.LineDashedMaterial({ color: 0xff3344, dashSize: 2, gapSize: 2, transparent: true, opacity: 0.8 }));
@@ -1359,7 +1243,7 @@ function chatter() {
     () => ['info', `LINK: ${d.id} RSSI -${55 + (Math.random() * 25 | 0)}dBm · SNR ${18 + (Math.random() * 14 | 0)}dB`],
     () => ['ok', `CONSENSUS: epoch ${epoch++} committed · quorum ${act.length}/${N}`],
     () => ['info', `WIND: gust ${(3 + Math.random() * 7).toFixed(1)}m/s @ ${Math.random() * 360 | 0}° · compensating`],
-    () => ['info', `BOIDS: sep ${W.sep} · ali ${W.ali} · coh ${W.coh} · avg neighbors ${(neiSum / Math.max(1, neiCnt)).toFixed(1)}`],
+    () => ['info', `BOIDS: sep ${W.sep} · ali ${W.ali} · coh ${W.coh} · avg neighbors ${(NET ? netNeiAvg() : neiSum / Math.max(1, neiCnt)).toFixed(1)}`],
     () => ['info', `THERMAL: ${d.id} ESC temps ${Math.round(d.temp)}°C · nominal`],
     () => ['info', `AR-OVERLAY: ${act.length} geo-anchors synced to ops tablets · drift ${(Math.random() * 3).toFixed(1)}cm`],
     () => ['warn', `${d.id} packet loss ${(3 + Math.random() * 9).toFixed(1)}% · rerouting via ${d2.id}`],
@@ -1380,7 +1264,10 @@ const boot = [
   ['warn', `geofence loaded · ${obstacles.length} NFZ · ${obstacles[0].name} ${obstacles[0].label} r ${(obstacles[0].r * M_PER_U).toFixed(0)}m`],
   ['ok', 'launch sequence authorized · staggered takeoff'],
 ];
+if (NET) boot.splice(2, 0, ['ok', `SERVER LINK: ${esc0(NET.wsUrl)} · site ${esc0(NET.siteId)} · ${NET.obstacles.length} NFZ · simulation runs on the server · map ${NET.cityFromServer ? 'from server' : 'local'}`]);
 boot.forEach((b, i) => setTimeout(() => log(b[0], b[1]), 150 + i * 280));
+netBoot.forEach(b => log(b[0], b[1]));                // server-mode warnings raised before the log existed (fallbacks)
+netUiReady = true; netQueue.splice(0).forEach(fn => fn());
 
 // ================= INPUT =================
 const raycaster = new THREE.Raycaster(), mouse = new THREE.Vector2();
@@ -1399,10 +1286,16 @@ renderer.domElement.addEventListener('pointermove', e => {
     $('#cursor').textContent = `CURSOR E${p.x >= 0 ? '+' : ''}${(p.x * M_PER_U).toFixed(0)} N${-p.z >= 0 ? '+' : ''}${(-p.z * M_PER_U).toFixed(0)}`;
   } else hoverRing.visible = false;
 });
-renderer.domElement.addEventListener('pointerdown', e => { downPos = [e.clientX, e.clientY]; lastInteraction = T; });
+renderer.domElement.addEventListener('pointerdown', e => { downPos = [e.clientX, e.clientY]; world.lastInteraction = T; });
 renderer.domElement.addEventListener('pointerup', e => {
   if (!downPos || Math.hypot(e.clientX - downPos[0], e.clientY - downPos[1]) > 5) return;
   const p = groundHit(e); if (!p || Math.abs(p.x) > AREA || Math.abs(p.z) > AREA) return;
+  if (NET) {                                        // server mode: only landmarks can be designated (orbit); free waypoints are offline-only
+    const l = world.orbitTargets.find(l => Math.hypot(l.x - p.x, l.z - p.z) < Math.max(l.r, 16));
+    ripple(p, SA.style.route);
+    if (l) netCmd('orbit', [l.code.toLowerCase()]); else asConsole(() => log('info', 'SERVER: click a landmark to orbit it · free waypoints are offline-only (use mission …)'));
+    return;
+  }
   outOfNfz(p);
   const S = SEL, who = SB ? S.name + ' ' : '';
   ripple(p, S.style.route);
@@ -1462,20 +1355,20 @@ function syncCtrl() {
   $('#bStill').classList.toggle('on', !ROTATE && !FOLLOW);
   $('#bHud').classList.toggle('on', !document.body.classList.contains('min'));
 }
-document.querySelectorAll('#ctrl [data-mode]').forEach(b => b.addEventListener('click', () => SEL.setMode(b.dataset.mode, 'operator command')));
+document.querySelectorAll('#ctrl [data-mode]').forEach(b => b.addEventListener('click', () => opMode(b.dataset.mode)));
 $('#bSw').addEventListener('click', () => selectSwarm(SEL === SA ? SB : SA));
 $('#bCam').addEventListener('click', toggleCam);
 $('#b2d').addEventListener('click', () => setView(VIEW === '2D' ? '3D' : '2D'));
 $('#bStill').addEventListener('click', toggleStill);
 $('#bHud').addEventListener('click', () => { document.body.classList.toggle('min'); syncCtrl(); frameCamera(); });
-function setAuto(v) { auto = v; $('#auto').classList.toggle('off', !auto); log('sys', `AUTO-TASKING ${auto ? 'ENABLED' : 'DISABLED'}`); SA.modeTimer = 0; if (SB) SB.modeTimer = -25; }
+function setAuto(v) { if (NET) netCmd('auto', [v ? 'on' : 'off']); else world.setAuto(v); }
 addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT') return;
   const k = e.key.toLowerCase();
   if (k === 'enter' || k === '/') { e.preventDefault(); cmdEl.focus(); }
-  else if (k >= '1' && k <= '4') { SEL.setMode(MODES[+k - 1], 'operator command'); }
+  else if (k >= '1' && k <= '4') { opMode(MODES[+k - 1]); }
   else if (k === 'tab') { e.preventDefault(); if (SB) selectSwarm(SEL === SA ? SB : SA); }
-  else if (k === 'a') setAuto(!auto);
+  else if (k === 'a') setAuto(!world.auto);
   else if (k === 'h') document.body.classList.toggle('nohud');
   else if (k === 'f') { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(); }
   else if (k === 'c') toggleCam();
@@ -1514,7 +1407,7 @@ const ON_OFF = ['on', 'off'];
 const CMD_ARGS = {
   help: [], status: [], clear: ['log', 'all'], drones: ['20', '40', '60', '100', '150'],
   mode: ['patrol', 'orbit', 'formation', 'scan'], orbit: () => orbitTargets.map(l => l.code.toLowerCase()),
-  quality: ['low', 'high'], name: [], auto: ON_OFF, view: ['2d', '3d'], still: ON_OFF, rotate: ON_OFF, follow: ON_OFF,
+  quality: ['low', 'high'], name: [], auto: ON_OFF, mission: ['demo', 'start', 'abort', 'status'], view: ['2d', '3d'], still: ON_OFF, rotate: ON_OFF, follow: ON_OFF,
   swarm2: ['off', '20', '40'], role: ['friendly', 'hostile'], sel: ['a', 'b'], sweep: ['0', '45', '90'],
 };
 const argsOf = k => { const a = CMD_ARGS[k]; return typeof a === 'function' ? a() : a || []; };
@@ -1533,7 +1426,7 @@ function complete() {
   else { toConsole = true; log('info', opts.join('  ')); toConsole = false; }
 }
 // chips de comandos rápidos (útiles en táctil): terminan en '=' → rellenan la entrada; si no, se ejecutan
-const CHIPS = ['help', 'status', 'mode=', 'orbit=', 'drones=', 'swarm2=', 'role=hostile', 'view=2d', 'clear'];
+const CHIPS = ['help', 'status', 'mode=', 'orbit=', 'drones=', 'mission demo', 'swarm2=', 'role=hostile', 'view=2d', 'clear'];
 $('#chips').innerHTML = CHIPS.map(c => `<span class="chip">${c}</span>`).join('');
 $('#chips').addEventListener('click', e => {
   const c = e.target.closest('.chip'); if (!c) return;
@@ -1568,18 +1461,7 @@ function updateUrl() {
   } catch (e) { /* file:// puede bloquear replaceState */ }
 }
 
-function setDroneCount(n) {
-  n = clamp(Math.round(n), 1, 150);
-  const prev = N;
-  if (n === prev) { log('info', `FLEET: swarm already at ${n} airframes`); return; }
-  N = n;
-  SA.setCount(N, 0.3);
-  if (!drones.includes(focus)) setFocus(drones[0]);
-  buildFleet();
-  updateUrl();
-  if (n < prev) log('warn', `FLEET: decommissioning ${prev - n} airframes · swarm size ${n}`);
-  else log('ok', `FLEET: commissioning ${n - prev} airframes · staggered takeoff · swarm size ${n}`);
-}
+function setDroneCount(n) { if (NET) netCmd('drones', [clamp(Math.round(n), 1, 150)]); else world.setDroneCount(n); }          // clamp, pads, log: core; focus / fleet matrix / URL: hooks.onSwarmChange
 
 function setQuality(q) {
   QUALITY = q;
@@ -1615,6 +1497,7 @@ function execCmd(raw) {
         'role=friendly|hostile · BRAVO aliado o intrusos (ALPHA los intercepta)',
         'sel=a|b · enjambre que reciben mode=/orbit=/clic  [Tab]',
         'sweep=GRADOS · barrido de la auto-rotación ±N° (0 = giro completo)',
+        'mission demo|start [id]|abort|status · misiones del servidor: demo crea un bucle, start lo lanza (requiere ?server=)',
         'status · help · clear (consola) · clear=log · clear=all',
         '[Enter] o [/] abre la consola · [Tab] autocompleta · [Esc] sale · [↑/↓] historial',
         'SYSTEM LOG: ALL/EVENTS/ALERTS filtran · pasar el ratón pausa · clic en un UAV-xx lo enfoca',
@@ -1628,7 +1511,7 @@ function execCmd(raw) {
     }
     case 'mode': {
       const md = arg.toUpperCase();
-      if (MODES.includes(md)) SEL.setMode(md, 'operator command');
+      if (MODES.includes(md)) opMode(md);
       else log('err', `unknown mode '${esc(argRaw)}' · options: ${MODES.join(', ').toLowerCase()}`);
       break;
     }
@@ -1638,9 +1521,10 @@ function execCmd(raw) {
       const l = q && landmarks.find(find);
       if (!q) log('info', `TARGETS: ${landmarks.map(l => `${l.code} ${l.name}${l.nfz ? ' [NFZ]' : ''}`).join(' · ')}`);
       else if (!l) log('err', `unknown target '${esc(argRaw)}' · options: ${orbitTargets.map(l => l.code.toLowerCase()).join(', ')}`);
-      else if (l.nfz) log('err', `DENIED: ${l.name} is inside ${obstacles[0].name} · no-fly zone`);
+      else if (l.nfz) log('err', `DENIED: ${l.name} is inside ${obstacles.length ? obstacles[0].name : 'NFZ'} · no-fly zone`);
+      else if (NET) netCmd('orbit', [l.code.toLowerCase()]);
       else {
-        const S = SEL; S.orbitLandmark(l); S.orbitFromClick = true; lastInteraction = T;
+        const S = SEL; S.orbitLandmark(l); S.orbitFromClick = true; world.lastInteraction = T;
         if (S.mode === 'ORBIT') { log('sys', `OPERATOR: ${SB ? S.name + ' ' : ''}orbit target moved → ${l.name}`); S.orbitFromClick = false; S.modeTimer = 0; S.lastAssign = -99; }
         else S.setMode('ORBIT', `operator target ${l.name}`);
       }
@@ -1673,7 +1557,7 @@ function execCmd(raw) {
     }
     case 'auto':
       if (arg === 'on' || arg === 'off') setAuto(arg === 'on');
-      else log('info', `auto-tasking ${auto ? 'on' : 'off'} · usage auto=on|off`);
+      else log('info', `auto-tasking ${world.auto ? 'on' : 'off'} · usage auto=on|off`);
       break;
     case 'swarm2': case 'bravo': {
       if (arg === 'off' || arg === '0') setSwarm2(0);
@@ -1698,6 +1582,7 @@ function execCmd(raw) {
       log('sys', `CAMERA: auto-rotate ${SWEEP ? `sweeps ±${SWEEP}° around the current view` : 'full 360° rotation'}`);
       break;
     }
+    case 'mission': missionCmd(argRaw); break;
     case 'status': {
       const c = s => drones.filter(d => d.state === s).length;
       log('info', `STATUS: ${N}${SB ? ` + ${SB.drones.length} ${SB.hostile ? 'hostile' : 'BRAVO'}` : ''} airframes · ${c('ACTIVE')} active · ${c('RTB') + c('LANDING')} rtb · ${c('CHARGING')} charging · mode ${SA.mode}${SB ? ` / ${SB.modeLabel}` : ''} · view ${VIEW}${!ROTATE && !FOLLOW ? ' (still)' : ''} · quality ${QUALITY} · ${$('#fps').textContent}`);
@@ -1710,6 +1595,50 @@ function execCmd(raw) {
     default:
       log('err', `${esc(cmd)}: command not found · type 'help'`);
   }
+}
+
+// ---- `mission demo|start [id]|abort|status` (REST, server mode only) ----
+const missionIds = [];                                // ids created / listed in this session, newest last (so `start` works without typing a UUID)
+const rememberMission = id => { if (id && !missionIds.includes(id)) missionIds.push(id); };
+const shortId = id => String(id ?? '').slice(0, 8);
+function resolveMissionId(a) {                        // '' → newest known; prefix → full id; otherwise as typed
+  if (!a) return missionIds[missionIds.length - 1] || '';
+  return missionIds.find(id => id.startsWith(a)) || a;
+}
+function missionErr(sub, e) {
+  const body = e && e.body;
+  if (e && e.status === 422 && body && Array.isArray(body.conflicts)) {
+    log('err', `mission ${sub}: route rejected · ${body.conflicts.map(c => esc(`${c.type} leg ${c.leg}${c.detail ? ': ' + c.detail : ''}`)).join(' | ')}`);
+  } else if (e && e.status) {
+    log('err', `mission ${sub}: HTTP ${e.status}${body && (body.error || body.message) ? ' · ' + esc(String(body.error || body.message)) : ''}`);
+  } else log('err', `mission ${sub}: server unreachable (${esc(String(e && e.message || e))})`);
+}
+async function missionCmd(argRaw) {
+  if (!NET) { log('err', 'mission: needs server mode · open the page with ?server=ws://127.0.0.1:3000'); return; }
+  const [sub0, ...rest] = argRaw.split(/\s+/).filter(Boolean), sub = (sub0 || 'status').toLowerCase(), arg = rest.join(' ');
+  const R = NET.rest;
+  try {
+    if (sub === 'demo') {
+      const r = await R.demoMission(); rememberMission(r.id);
+      asConsole(() => log('ok', `mission demo: created ${esc(String(r.id))} · ${esc(String(r.status))}${r.warnings && r.warnings.length ? ' · ' + r.warnings.length + ' warning(s)' : ''} · launch with: mission start`));
+    } else if (sub === 'start') {
+      const id = resolveMissionId(arg);
+      if (!id) { asConsole(() => log('err', 'mission start: no mission yet · run `mission demo` first or pass an id')); return; }
+      const r = await R.startMission(id);
+      asConsole(() => log('ok', `mission start: ${esc(shortId(id))} ${esc(String(r && r.status || 'RUNNING'))}`));
+    } else if (sub === 'abort') {
+      const cur = NET.client.latest && NET.client.latest.mission, id = arg ? resolveMissionId(arg) : (cur && cur.id) || resolveMissionId('');
+      if (!id) { asConsole(() => log('err', 'mission abort: no running mission')); return; }
+      const r = await R.abortMission(id);
+      asConsole(() => log('warn', `mission abort: ${esc(shortId(id))} ${esc(String(r && r.status || 'ABORTED'))}`));
+    } else if (sub === 'status') {
+      const cur = NET.client.latest && NET.client.latest.mission;
+      asConsole(() => log('info', cur ? `mission status: ${esc(shortId(cur.id))} ${esc(String(cur.status))} · waypoint ${(+cur.wpIdx || 0) + 1}/${cur.total}` : 'mission status: no mission running'));
+      const list = await R.missions(), arr = Array.isArray(list) ? list : (list && list.missions) || [];
+      arr.forEach(m => rememberMission(m.id));
+      asConsole(() => arr.slice(-3).forEach(m => log('info', `  ${esc(shortId(m.id))} ${esc(String(m.status))} ${esc(String(m.name ?? ''))}`)));
+    } else asConsole(() => log('err', `mission: unknown subcommand '${esc(sub)}' · usage mission demo|start [id]|abort|status`));
+  } catch (e) { asConsole(() => missionErr(sub, e)); }
 }
 
 // ================= CANVASES =================
@@ -1788,7 +1717,7 @@ function drawMap() {
   // mission overlays, one per swarm in its colour
   for (const sw of SB ? [SA, SB] : [SA]) {
     const c = sw.style.css, m = sw.modeLabel, pre = SB ? sw.key : '';
-    if (m === 'PATROL') {
+    if (m === 'PATROL' || m === 'MISSION') {
       ctx.strokeStyle = `rgba(${c},.7)`; ctx.setLineDash([4, 4]); ctx.beginPath();
       sw.waypoints.forEach((p, i) => i ? ctx.lineTo(X(p.x), Y(p.z)) : ctx.moveTo(X(p.x), Y(p.z)));
       ctx.closePath(); ctx.stroke(); ctx.setLineDash([]);
@@ -1827,6 +1756,8 @@ function drawMap() {
     else { ctx.moveTo(x, y - 2.5); ctx.lineTo(x + 2.5, y); ctx.lineTo(x, y + 2.5); ctx.lineTo(x - 2.5, y); }
     ctx.fill();
   }
+  ctx.fillStyle = '#ff6ee0';                          // external drones (server mode)
+  for (const e of extMarkers.values()) ctx.fillRect(X(e.x) - 2, Y(e.z) - 2, 4, 4);
   ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.arc(X(focus.pos.x), Y(focus.pos.z), 6 + Math.sin(T * 6) * 1.5, 0, Math.PI * 2); ctx.stroke();
   // camera
   if (VIEW === '2D') {
@@ -1934,11 +1865,12 @@ function updateHud(active) {
 // ================= CAMERA / FPV =================
 const tagEl = $('#tag3d'), _p = V3();
 function updateCamera(dt) {
+  applyZoom();
   if (VIEW === '2D') {
     // 2D: se desplaza el mapa (objetivo y cámara a la vez) hacia el drone seguido o el centroide del enjambre
     let k = 0;
     if (camMode === 'FOLLOW') { _p.copy(focus.pos); k = 1 - Math.exp(-dt * 3); }
-    else if (FOLLOW && T - lastInteraction > 8) {
+    else if (FOLLOW && T - world.lastInteraction > 8) {
       const act = drones.filter(d => d.state === 'ACTIVE');
       if (act.length) { _p.set(0, 0, 0); act.forEach(d => _p.add(d.pos)); _p.divideScalar(act.length).multiplyScalar(0.5); k = 1 - Math.exp(-dt * 0.3); }
     }
@@ -1957,7 +1889,7 @@ function updateCamera(dt) {
     camera.lookAt(lookTarget);
   } else {
     // drift orbit target toward swarm centroid when idle (salvo cámara fija / follow=off)
-    if (FOLLOW && T - lastInteraction > 8) {
+    if (FOLLOW && T - world.lastInteraction > 8) {
       const act = drones.filter(d => d.state === 'ACTIVE');
       if (act.length) {
         _p.set(0, 0, 0); act.forEach(d => _p.add(d.pos)); _p.divideScalar(act.length);
@@ -1966,7 +1898,7 @@ function updateCamera(dt) {
       }
     }
     // auto-rotation as a back-and-forth sweep of ±SWEEP° around the current view (paused while the user drags)
-    if (ROTATE && SWEEP > 0 && !dragging && T - lastInteraction > 3) {
+    if (ROTATE && SWEEP > 0 && !dragging && T - world.lastInteraction > 3) {
       _sph.setFromVector3(_p.subVectors(camera.position, controls.target));
       if (!sweepOn) { sweepHome = _sph.theta - sweepAmp() * Math.sin(sweepPh); sweepOn = true; }
       sweepPh += dt * 0.0367 * 1.4 / Math.max(0.2, sweepAmp());   // peak speed ≈ 1.4× the old autoRotateSpeed 0.35
@@ -1979,8 +1911,38 @@ function updateCamera(dt) {
 const _sph = new THREE.Spherical();
 let sweepOn = false, sweepHome = 0, sweepPh = 0, dragging = false;
 const sweepAmp = () => THREE.MathUtils.degToRad(SWEEP);
+// ---- wheel zoom: one notch = a fixed ~5 % step, independent of the mouse / browser delta units and of the frame rate ----
+// OrbitControls multiplies every wheel event's delta (pixels, lines or pages depending on device and browser) into the zoom
+// and applies the accumulated product in one go on the next frame, so a fast wheel or a low FPS jumps straight to min/max
+// distance. Here the delta is normalised and clamped per event, and the zoom is eased in over time (real clock, not sim dt).
+const ZOOM_PER_PX = 0.0005, ZOOM_EVENT_MAX = 0.12, ZOOM_EASE = 14;       // log-scale per pixel, per-event cap, 1/s
+let zoomPending = 0, zoomClock = performance.now();
+if (params.get('embed') !== '1') {
+  document.addEventListener('wheel', e => {
+    if (e.target !== renderer.domElement) return;
+    e.preventDefault(); e.stopPropagation();                         // OrbitControls / MapControls never see the wheel
+    const px = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 100 : 1);
+    zoomPending += clamp(px * ZOOM_PER_PX, -ZOOM_EVENT_MAX, ZOOM_EVENT_MAX);
+    zoomPending = clamp(zoomPending, -0.6, 0.6);
+    world.lastInteraction = T;                                       // pause the idle camera drift / sweep while zooming
+  }, { capture: true, passive: false });
+}
+function applyZoom() {
+  const now = performance.now(), rdt = Math.min(0.25, (now - zoomClock) / 1000); zoomClock = now;
+  if (Math.abs(zoomPending) < 1e-4) { zoomPending = 0; return; }
+  const step = zoomPending * (1 - Math.exp(-rdt * ZOOM_EASE));
+  zoomPending -= step;
+  if (VIEW === '2D') {
+    topCam.zoom = clamp(topCam.zoom * Math.exp(-step), topControls.minZoom, topControls.maxZoom);
+    topCam.updateProjectionMatrix();
+  } else if (camMode === 'ORBIT') {
+    _p.subVectors(camera.position, controls.target);
+    const len = clamp(_p.length() * Math.exp(step), controls.minDistance, controls.maxDistance);
+    camera.position.copy(controls.target).add(_p.setLength(len));
+  }
+}
 controls.addEventListener('start', () => { dragging = true; });
-controls.addEventListener('end', () => { dragging = false; lastInteraction = T; });
+controls.addEventListener('end', () => { dragging = false; world.lastInteraction = T; });
 function renderFPV() {
   if (document.body.classList.contains('nohud')) return;
   const r = $('#fpv').getBoundingClientRect(); if (r.width < 4 || r.height < 4) return;
@@ -2003,20 +1965,16 @@ function renderFPV() {
 // ================= MAIN LOOP =================
 const clock = new THREE.Clock();
 let hudT = 0, chartT = 0, chatT = 1.5;
-SA.genRoute();
 updateModeLabels();
 
 // simulation step (no rendering) → also used by __swarm.warp() in headless tests
 function simStep(dt) {
-  T += dt;
+  if (NET) netStep(dt);                             // server mode: drones come from the snapshots (no local simulation)
+  else {
+    world.step(dt);                                 // simulation: sim-core.js (T += dt, swarm steps, intercept, drone updates)
+    T = world.T; neiSum = world.neiSum; neiCnt = world.neiCnt;
+  }
 
-  // --- simulation ---
-  const flying = drones.filter(d => d.state === 'ACTIVE' || d.state === 'RTB');   // separation across both swarms
-  SA.step(dt);
-  if (SB) SB.step(dt);
-  intercept(dt);                                    // overrides the goals of ALPHA interceptors
-  neiSum = 0; neiCnt = 0;
-  for (const d of drones) d.update(dt, flying);
   const active = friendlyActive();
   markCoverage(active);
 
@@ -2136,12 +2094,13 @@ const canvasRO = new ResizeObserver(() => fitAll());
 fitAll();
 frameCamera();
 if (VIEW === '2D') setView('2D', true);
-if (N2) { setSwarm2(N2, true); if (ROLE2 === 'hostile') setRole('hostile', true); }
+if (N2 && !NET) { setSwarm2(N2, true); if (ROLE2 === 'hostile') setRole('hostile', true); }
 syncCtrl();
 frame();
 // debug / tests
-window.__swarm = { drones: () => drones, landmarks, obstacles, topAt, sceneToGeo, get SA() { return SA; }, get SB() { return SB; }, setMode: (m, w) => SEL.setMode(m, w), setSwarm2, setRole, runCmd, camera, controls, topCam, topControls, setView, setCamAuto, cacVoxels, cityMesh, cacMeshes, scene, gridGroup,
-  warp(sec) { for (let t = 0; t < sec; t += 0.05) simStep(0.05); } };
+window.__swarm = { world, net: NET, netDrones, extMarkers, hm: HM, city: CITY, drones: () => drones, landmarks, obstacles, topAt, sceneToGeo, get SA() { return SA; }, get SB() { return SB; }, setMode: (m, w) => SEL.setMode(m, w), setSwarm2, setRole, runCmd, camera, controls, topCam, topControls, setView, setCamAuto, cacVoxels, cityMesh, cacMeshes, scene, gridGroup,
+  warp(sec) { for (let t = 0; t < sec; t += 0.05) simStep(0.05); },
+  warpFixed(sec, dt) { const n = Math.round(sec / dt); for (let i = 0; i < n; i++) simStep(dt); } };   // fixed dt (parity tests)
 </script>
 </body>
 </html>
