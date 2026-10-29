@@ -3,3 +3,5 @@ README.private.md
 node_modules/
 frames/
 tools/.cache/
+.env
+docs/reports/

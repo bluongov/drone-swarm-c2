@@ -1,0 +1,36 @@
+{
+  "name": "drone-swarm-c2",
+  "private": true,
+  "type": "module",
+  "description": "Drone swarm mission control: static Three.js frontend + optional Node server (see docs/architecture.md)",
+  "engines": {
+    "node": ">=26"
+  },
+  "scripts": {
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose down",
+    "db:migrate": "node --env-file-if-exists=.env server/db/migrate.ts",
+    "db:load": "node --env-file-if-exists=.env server/db/load-site.ts",
+    "server": "node --env-file-if-exists=.env server/src/index.ts",
+    "typecheck": "tsc -p server/tsconfig.json --noEmit",
+    "test": "node --env-file-if-exists=.env --test --test-concurrency=1 server/test/",
+    "baseline": "node tools/baseline.mjs",
+    "parity": "node tools/parity.mjs"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.3.1",
+    "@fastify/websocket": "^11.3.4",
+    "fastify": "^5.12.7",
+    "pg": "^8.23.1",
+    "three": "^0.160.0",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/pg": "^8.23.1",
+    "@types/three": "^0.160.0",
+    "@types/ws": "^8.18.2",
+    "playwright": "^1.64.1",
+    "typescript": "^7.0.2"
+  }
+}

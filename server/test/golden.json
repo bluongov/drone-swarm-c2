@@ -1,0 +1,552 @@
+{
+  "url": "http://127.0.0.1:8701/index.html",
+  "extra": "",
+  "runs": 5,
+  "warm": 20,
+  "every": 5,
+  "createdAt": "2026-10-29T09:57:53.428Z",
+  "scenarios": {
+    "S1": {
+      "drones": 60,
+      "sec": 120,
+      "cmds": [
+        "auto=off",
+        "mode=patrol"
+      ],
+      "runs": [
+        {
+          "samples": 20,
+          "active": 54.4,
+          "meanSpeed": 12.146224996789037,
+          "meanNei": 22.734706657684967,
+          "minSep": 3.1529352544421814,
+          "contacts": 0,
+          "nfzFriendly": 0,
+          "maxIntercepting": 0
+        },
+        {
+          "samples": 20,
+          "active": 53.85,
+          "meanSpeed": 12.358959428533861,
+          "meanNei": 23.692923080060684,
+          "minSep": 3.1668369235369087,
+          "contacts": 0,
+          "nfzFriendly": 0,
+          "maxIntercepting": 0
+        },
+        {
+          "samples": 20,
+          "active": 53.8,
+          "meanSpeed": 12.773288765737883,
+          "meanNei": 22.757220364469237,
+          "minSep": 4.414862630770451,
+          "contacts": 0,
+          "nfzFriendly": 0,
+          "maxIntercepting": 0
+        },
+        {
+          "samples": 20,
+          "active": 51.6,
+          "meanSpeed": 12.643159205888407,
+          "meanNei": 21.88458897184286,
+          "minSep": 4.7767899189886345,
+          "contacts": 0,
+          "nfzFriendly": 0,
+          "maxIntercepting": 0
+        },
+        {
+          "samples": 20,
+          "active": 53.6,
+          "meanSpeed": 12.61231048722887,
+          "meanNei": 22.65585575288106,
+          "minSep": 3.7774510153670082,
+          "contacts": 0,
+          "nfzFriendly": 0,
+          "maxIntercepting": 0
+        }
+      ],
+      "mean": {
+        "samples": 20,
+        "active": 53.45,
+        "meanSpeed": 12.506788576835612,
+        "meanNei": 22.745058965387763,
+        "minSep": 3.857775148621036,
+        "contacts": 0,
+        "nfzFriendly": 0,
+        "maxIntercepting": 0
+      },
+      "min": {
+        "samples": 20,
+        "active": 51.6,
+        "meanSpeed": 12.146224996789037,
+        "meanNei": 21.88458897184286,
+        "minSep": 3.1529352544421814,
+        "contacts": 0,
+        "nfzFriendly": 0,
+        "maxIntercepting": 0
+      },
+      "max": {
+        "samples": 20,
+        "active": 54.4,
+        "meanSpeed": 12.773288765737883,
+        "meanNei": 23.692923080060684,
+        "minSep": 4.7767899189886345,
+        "contacts": 0,
+        "nfzFriendly": 0,
+        "maxIntercepting": 0
+      }
+    },
+    "S2": {
+      "drones": 60,
+      "sec": 120,
+      "cmds": [
+        "auto=off",
+        "orbit=oce"
+      ],
+      "runs": [
+        {
+          "samples": 20,
+          "active": 53.95,
+          "meanSpeed": 13.873034618244768,
+          "meanNei": 3.355555615888446,
+          "minSep": 3.523192663548495,
+          "contacts": 0,
+          "nfzFriendly": 0,
+          "maxIntercepting": 0
+        },
+        {
+          "samples": 20,
+          "active": 55.6,
+          "meanSpeed": 14.237124039270403,
+          "meanNei": 3.683535319656837,
+          "minSep": 4.161962848794439,
+          "contacts": 0,
+          "nfzFriendly": 0,
+          "maxIntercepting": 0
+        },
+        {
+          "samples": 20,
+          "active": 52.4,
+          "meanSpeed": 13.992021632259457,
+          "meanNei": 3.339583138510225,
+          "minSep": 2.945326232338642,
+          "contacts": 0,
+          "nfzFriendly": 0,
+          "maxIntercepting": 0
+        },
+        {
+          "samples": 20,
+          "active": 53.9,
+          "meanSpeed": 13.789107739919928,
+          "meanNei": 3.4113736915874675,
+          "minSep": 4.02219879927974,
+          "contacts": 0,
+          "nfzFriendly": 0,
+          "maxIntercepting": 0
+        },
+        {
+          "samples": 20,
+          "active": 54.05,
+          "meanSpeed": 14.256066829754198,
+          "meanNei": 3.7823994113982473,
+          "minSep": 4.37554859125454,
+          "contacts": 0,
+          "nfzFriendly": 0,
+          "maxIntercepting": 0
+        }
+      ],
+      "mean": {
+        "samples": 20,
+        "active": 53.980000000000004,
+        "meanSpeed": 14.02947097188975,
+        "meanNei": 3.5144894354082448,
+        "minSep": 3.805645827043171,
+        "contacts": 0,
+        "nfzFriendly": 0,
+        "maxIntercepting": 0
+      },
+      "min": {
+        "samples": 20,
+        "active": 52.4,
+        "meanSpeed": 13.789107739919928,
+        "meanNei": 3.339583138510225,
+        "minSep": 2.945326232338642,
+        "contacts": 0,
+        "nfzFriendly": 0,
+        "maxIntercepting": 0
+      },
+      "max": {
+        "samples": 20,
+        "active": 55.6,
+        "meanSpeed": 14.256066829754198,
+        "meanNei": 3.7823994113982473,
+        "minSep": 4.37554859125454,
+        "contacts": 0,
+        "nfzFriendly": 0,
+        "maxIntercepting": 0
+      }
+    },
+    "S3": {
+      "drones": 60,
+      "sec": 120,
+      "cmds": [
+        "auto=off",
+        "mode=formation"
+      ],
+      "runs": [
+        {
+          "samples": 20,
+          "active": 54.75,
+          "meanSpeed": 13.778455909156492,
+          "meanNei": 11.101215847836727,
+          "minSep": 3.855668707675641,
+          "contacts": 0,
+          "nfzFriendly": 1,
+          "maxIntercepting": 0
+        },
+        {
+          "samples": 20,
+          "active": 53.95,
+          "meanSpeed": 13.692146636229063,
+          "meanNei": 10.884796808594919,
+          "minSep": 4.243486686457469,
+          "contacts": 0,
+          "nfzFriendly": 0,
+          "maxIntercepting": 0
+        },
+        {
+          "samples": 20,
+          "active": 53.7,
+          "meanSpeed": 13.770358297946563,
+          "meanNei": 10.658095729029657,
+          "minSep": 3.6551014820982712,
+          "contacts": 0,
+          "nfzFriendly": 0,
+          "maxIntercepting": 0
+        },
+        {
+          "samples": 20,
+          "active": 53.3,
+          "meanSpeed": 13.728513399674267,
+          "meanNei": 10.671523423053939,
+          "minSep": 3.109317088591478,
+          "contacts": 0,
+          "nfzFriendly": 0,
+          "maxIntercepting": 0
+        },
+        {
+          "samples": 20,
+          "active": 53.5,
+          "meanSpeed": 13.805907266139675,
+          "meanNei": 10.310451299702455,
+          "minSep": 4.618888214501633,
+          "contacts": 0,
+          "nfzFriendly": 2,
+          "maxIntercepting": 0
+        }
+      ],
+      "mean": {
+        "samples": 20,
+        "active": 53.839999999999996,
+        "meanSpeed": 13.755076301829211,
+        "meanNei": 10.725216621643542,
+        "minSep": 3.8964924358648987,
+        "contacts": 0,
+        "nfzFriendly": 0.6,
+        "maxIntercepting": 0
+      },
+      "min": {
+        "samples": 20,
+        "active": 53.3,
+        "meanSpeed": 13.692146636229063,
+        "meanNei": 10.310451299702455,
+        "minSep": 3.109317088591478,
+        "contacts": 0,
+        "nfzFriendly": 0,
+        "maxIntercepting": 0
+      },
+      "max": {
+        "samples": 20,
+        "active": 54.75,
+        "meanSpeed": 13.805907266139675,
+        "meanNei": 11.101215847836727,
+        "minSep": 4.618888214501633,
+        "contacts": 0,
+        "nfzFriendly": 2,
+        "maxIntercepting": 0
+      }
+    },
+    "S4": {
+      "drones": 60,
+      "sec": 120,
+      "cmds": [
+        "auto=off",
+        "mode=scan"
+      ],
+      "runs": [
+        {
+          "samples": 20,
+          "active": 53.2,
+          "meanSpeed": 18.29401149044212,
+          "meanNei": 1.562886999407032,
+          "minSep": 6.982086328792223,
+          "contacts": 0,
+          "nfzFriendly": 0,
+          "maxIntercepting": 0
+        },
+        {
+          "samples": 20,
+          "active": 53.7,
+          "meanSpeed": 18.306563456176015,
+          "meanNei": 1.6043379718150916,
+          "minSep": 7.278152031883294,
+          "contacts": 0,
+          "nfzFriendly": 0,
+          "maxIntercepting": 0
+        },
+        {
+          "samples": 20,
+          "active": 53.7,
+          "meanSpeed": 18.361221792830158,
+          "meanNei": 1.5884587229372957,
+          "minSep": 6.979377695979303,
+          "contacts": 0,
+          "nfzFriendly": 0,
+          "maxIntercepting": 0
+        },
+        {
+          "samples": 20,
+          "active": 53.5,
+          "meanSpeed": 18.340681045258798,
+          "meanNei": 1.5660682155977592,
+          "minSep": 6.2593466911003866,
+          "contacts": 0,
+          "nfzFriendly": 0,
+          "maxIntercepting": 0
+        },
+        {
+          "samples": 20,
+          "active": 53.25,
+          "meanSpeed": 18.245203877344107,
+          "meanNei": 1.6434615768168452,
+          "minSep": 6.897237062888043,
+          "contacts": 0,
+          "nfzFriendly": 0,
+          "maxIntercepting": 0
+        }
+      ],
+      "mean": {
+        "samples": 20,
+        "active": 53.470000000000006,
+        "meanSpeed": 18.30953633241024,
+        "meanNei": 1.5930426973148049,
+        "minSep": 6.879239962128649,
+        "contacts": 0,
+        "nfzFriendly": 0,
+        "maxIntercepting": 0
+      },
+      "min": {
+        "samples": 20,
+        "active": 53.2,
+        "meanSpeed": 18.245203877344107,
+        "meanNei": 1.562886999407032,
+        "minSep": 6.2593466911003866,
+        "contacts": 0,
+        "nfzFriendly": 0,
+        "maxIntercepting": 0
+      },
+      "max": {
+        "samples": 20,
+        "active": 53.7,
+        "meanSpeed": 18.361221792830158,
+        "meanNei": 1.6434615768168452,
+        "minSep": 7.278152031883294,
+        "contacts": 0,
+        "nfzFriendly": 0,
+        "maxIntercepting": 0
+      }
+    },
+    "S5": {
+      "drones": 150,
+      "sec": 180,
+      "cmds": [
+        "auto=off",
+        "mode=patrol"
+      ],
+      "runs": [
+        {
+          "samples": 32,
+          "active": 130.15625,
+          "meanSpeed": 12.516713886345652,
+          "meanNei": 29.154860462448273,
+          "minSep": 2.865117899201199,
+          "contacts": 0,
+          "nfzFriendly": 0,
+          "maxIntercepting": 0
+        },
+        {
+          "samples": 32,
+          "active": 127.75,
+          "meanSpeed": 12.265993809823442,
+          "meanNei": 26.817064716070053,
+          "minSep": 3.623861316173404,
+          "contacts": 0,
+          "nfzFriendly": 0,
+          "maxIntercepting": 0
+        },
+        {
+          "samples": 32,
+          "active": 130.28125,
+          "meanSpeed": 12.38771327814475,
+          "meanNei": 29.106446169481043,
+          "minSep": 2.782872076627161,
+          "contacts": 0,
+          "nfzFriendly": 0,
+          "maxIntercepting": 0
+        },
+        {
+          "samples": 32,
+          "active": 128.46875,
+          "meanSpeed": 12.061135897124249,
+          "meanNei": 27.69164030406964,
+          "minSep": 2.8724994922369445,
+          "contacts": 0,
+          "nfzFriendly": 0,
+          "maxIntercepting": 0
+        },
+        {
+          "samples": 32,
+          "active": 128.21875,
+          "meanSpeed": 12.002163627600456,
+          "meanNei": 27.77208339902096,
+          "minSep": 3.0005686689649576,
+          "contacts": 0,
+          "nfzFriendly": 0,
+          "maxIntercepting": 0
+        }
+      ],
+      "mean": {
+        "samples": 32,
+        "active": 128.975,
+        "meanSpeed": 12.246744099807708,
+        "meanNei": 28.108419010217993,
+        "minSep": 3.028983890640733,
+        "contacts": 0,
+        "nfzFriendly": 0,
+        "maxIntercepting": 0
+      },
+      "min": {
+        "samples": 32,
+        "active": 127.75,
+        "meanSpeed": 12.002163627600456,
+        "meanNei": 26.817064716070053,
+        "minSep": 2.782872076627161,
+        "contacts": 0,
+        "nfzFriendly": 0,
+        "maxIntercepting": 0
+      },
+      "max": {
+        "samples": 32,
+        "active": 130.28125,
+        "meanSpeed": 12.516713886345652,
+        "meanNei": 29.154860462448273,
+        "minSep": 3.623861316173404,
+        "contacts": 0,
+        "nfzFriendly": 0,
+        "maxIntercepting": 0
+      }
+    },
+    "S6": {
+      "drones": 60,
+      "sec": 180,
+      "cmds": [
+        "auto=off",
+        "mode=patrol",
+        "swarm2=16",
+        "role=hostile"
+      ],
+      "runs": [
+        {
+          "samples": 32,
+          "active": 51.40625,
+          "meanSpeed": 12.168897736944825,
+          "meanNei": 14.166686819284015,
+          "minSep": 4.124649207830375,
+          "contacts": 0,
+          "nfzFriendly": 0,
+          "maxIntercepting": 13
+        },
+        {
+          "samples": 32,
+          "active": 51.625,
+          "meanSpeed": 12.036930792222693,
+          "meanNei": 11.977166130774041,
+          "minSep": 4.7183230563932215,
+          "contacts": 0,
+          "nfzFriendly": 0,
+          "maxIntercepting": 13
+        },
+        {
+          "samples": 32,
+          "active": 51.65625,
+          "meanSpeed": 11.943785712851769,
+          "meanNei": 13.774891297487533,
+          "minSep": 4.1416426248211,
+          "contacts": 0,
+          "nfzFriendly": 0,
+          "maxIntercepting": 15
+        },
+        {
+          "samples": 32,
+          "active": 51.15625,
+          "meanSpeed": 12.87662713574195,
+          "meanNei": 13.779190974844433,
+          "minSep": 4.136487284480641,
+          "contacts": 0,
+          "nfzFriendly": 0,
+          "maxIntercepting": 14
+        },
+        {
+          "samples": 32,
+          "active": 51.71875,
+          "meanSpeed": 11.779705539366988,
+          "meanNei": 13.162246139171492,
+          "minSep": 3.633949260741505,
+          "contacts": 0,
+          "nfzFriendly": 0,
+          "maxIntercepting": 13
+        }
+      ],
+      "mean": {
+        "samples": 32,
+        "active": 51.5125,
+        "meanSpeed": 12.161189383425645,
+        "meanNei": 13.372036272312304,
+        "minSep": 4.151010286853369,
+        "contacts": 0,
+        "nfzFriendly": 0,
+        "maxIntercepting": 13.6
+      },
+      "min": {
+        "samples": 32,
+        "active": 51.15625,
+        "meanSpeed": 11.779705539366988,
+        "meanNei": 11.977166130774041,
+        "minSep": 3.633949260741505,
+        "contacts": 0,
+        "nfzFriendly": 0,
+        "maxIntercepting": 13
+      },
+      "max": {
+        "samples": 32,
+        "active": 51.71875,
+        "meanSpeed": 12.87662713574195,
+        "meanNei": 14.166686819284015,
+        "minSep": 4.7183230563932215,
+        "contacts": 0,
+        "nfzFriendly": 0,
+        "maxIntercepting": 15
+      }
+    }
+  }
+}

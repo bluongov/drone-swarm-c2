@@ -1,0 +1,20 @@
+# PostgreSQL 17 + PostGIS + TimescaleDB. Local development only: bound to 127.0.0.1.
+# Credentials come from .env (git-ignored, see .env.example).
+services:
+  db:
+    image: timescale/timescaledb-ha:pg17
+    env_file: .env
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - swarm_pgdata:/home/postgres/pgdata/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB} -h 127.0.0.1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  swarm_pgdata:
