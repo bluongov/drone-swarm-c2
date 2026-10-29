@@ -46,16 +46,35 @@ Requisitos que se buscaban:
 git clone git@github.com:bluongov/drone-swarm-c2.git
 cd drone-swarm-c2
 
-# Opción 1: doble clic en index.html
-# Opción 2: desde terminal (Linux)
-xdg-open index.html
-# Opción 3: servidor local (recomendado; así los cambios se guardan en la URL)
+# Servidor estático (necesario: la simulación es un módulo ES, sim-core.js, y file:// no lo carga)
 python3 -m http.server 8080   # → http://localhost:8080
 ```
 
 Después pulsa **`F`** para pantalla completa y déjalo corriendo.
 
 **Requisitos:** un navegador moderno con WebGL (Chrome, Edge o Firefox) y **conexión a internet**, porque Three.js se carga desde el CDN de jsDelivr.
+
+---
+
+## 🖥️ Modo servidor (opcional)
+
+Sin parámetros, todo corre en el navegador como siempre. Con `?server=ws://host:puerto` la página deja de simular y **pinta lo que manda un servidor**: los drones, las misiones y el mapa vienen de un backend Node con base de datos. Es la base para inyectar telemetría real más adelante.
+
+- **Base de datos:** PostgreSQL 17 + PostGIS + TimescaleDB (Docker). Guarda el escenario (rejilla OSM, alturas, fórmulas, zonas NFZ como polígonos) y la telemetría (hypertable).
+- **Simulación en el servidor:** usa el mismo `sim-core.js` que el navegador, así que el enjambre se comporta igual que la demo.
+- **Misiones:** ruta de waypoints validada contra las NFZ (PostGIS) y contra los edificios antes de lanzarla.
+- **Telemetría externa:** `POST /ingest` o `WS /ingest` con `{droneId, lat, lon, alt_m, …}`; esos drones aparecen como `EXT-…`.
+
+```bash
+cp .env.example .env            # credenciales locales (no se suben al repo)
+npm install
+npm run db:up && npm run db:migrate
+node tools/export-site.mjs      # altura + landmarks desde el frontend (Playwright)
+npm run db:load
+npm run server                  # → abre http://127.0.0.1:3000/ (el servidor también sirve la página)
+```
+
+En la consola C2: `mission demo`, `mission start`, `mission status`, `mission abort`. Arquitectura y plan: [`docs/architecture.md`](docs/architecture.md), [`docs/implementation-plan.md`](docs/implementation-plan.md). Tests: `npm test`. Toda la telemetría sigue siendo simulada salvo la que se inyecte por `/ingest`.
 
 ---
 
@@ -350,7 +369,12 @@ La lógica está en `index.html`, en el `<script type="module">` (los datos del 
 drone-swarm-c2/
 ├── .gitignore             # excluye tools/.cache/
 ├── index.html            # app (HTML + CSS + JS)
+├── sim-core.js           # simulación compartida navegador/servidor (boids, misiones)
+├── net-client.js         # cliente WebSocket/REST del modo servidor
 ├── cac-shapes.js         # fórmulas voxel de edificios CAC (generado)
+├── server/               # backend Node (Fastify, WebSocket, PostGIS/TimescaleDB, tests)
+├── docker-compose.yml    # base de datos local
+├── docs/                 # arquitectura y plan de implementación
 ├── assets/
 │   ├── valencia-city.js  # datos OSM rasterizados (generado)
 │   ├── demo.gif          # GIF del README

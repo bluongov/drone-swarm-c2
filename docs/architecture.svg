@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 800" width="1400" height="800" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e6edf7"/></marker><marker id="ah-r" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M10,0 L0,5 L10,10 z" fill="#e6edf7"/></marker></defs>
+<rect width="1400" height="800" fill="#0b1220"/>
+<text x="40" y="46" font-size="24" font-weight="700" fill="#e6edf7">Drone Swarm C2 · target architecture (v1)</text>
+<text x="40" y="68" font-size="13" fill="#8fa3bf">Server owns drone + mission state · DB holds maps and telemetry history · frontend renders. Solid = v1, dashed = later / existing offline mode.</text>
+<rect x="40" y="130" width="260" height="100" rx="10" fill="#111b2e" stroke="#64748b" stroke-width="2" stroke-dasharray="7 5"/>
+<text x="170.0" y="152" text-anchor="middle" font-size="14" font-weight="700" fill="#64748b">REAL DRONE</text>
+<text x="170.0" y="172" text-anchor="middle" font-size="12" fill="#e6edf7">MAVLink on companion computer</text>
+<text x="170.0" y="188" text-anchor="middle" font-size="12" fill="#e6edf7">bridge → MQTT / HTTP</text>
+<text x="170.0" y="204" text-anchor="middle" font-size="12" fill="#e6edf7">(phase 4, not in v1)</text>
+<rect x="40" y="290" width="260" height="110" rx="10" fill="#111b2e" stroke="#38bdf8" stroke-width="2"/>
+<text x="170.0" y="312" text-anchor="middle" font-size="14" font-weight="700" fill="#38bdf8">SIM DRONES</text>
+<text x="170.0" y="332" text-anchor="middle" font-size="12" fill="#e6edf7">SimWorld = shared sim-core.js</text>
+<text x="170.0" y="348" text-anchor="middle" font-size="12" fill="#e6edf7">real flocking code, 30 Hz tick</text>
+<text x="170.0" y="364" text-anchor="middle" font-size="12" fill="#e6edf7">same ingest path as real drones</text>
+<rect x="40" y="450" width="260" height="120" rx="10" fill="#111b2e" stroke="#64748b" stroke-width="2" stroke-dasharray="7 5"/>
+<text x="170.0" y="472" text-anchor="middle" font-size="14" font-weight="700" fill="#64748b">LATER</text>
+<text x="170.0" y="492" text-anchor="middle" font-size="12" fill="#e6edf7">MQTT broker + MAVLink bridge</text>
+<text x="170.0" y="508" text-anchor="middle" font-size="12" fill="#e6edf7">BRAVO / hostile wiring in</text>
+<text x="170.0" y="524" text-anchor="middle" font-size="12" fill="#e6edf7">server mode, auth, deploy</text>
+<text x="170.0" y="540" text-anchor="middle" font-size="12" fill="#e6edf7">optional: Rust sim core</text>
+<text x="170" y="112" text-anchor="middle" font-size="13" font-weight="700" fill="#38bdf8" letter-spacing="1">DATA SOURCES</text>
+<rect x="370" y="100" width="655" height="330" rx="14" fill="#34d399" fill-opacity="0.05" stroke="#34d399" stroke-opacity="0.6" stroke-width="1.5"/>
+<text x="386" y="124" font-size="13" font-weight="700" fill="#34d399" letter-spacing="1">SERVER · Node 26 + TypeScript · Fastify + ws · :3000</text>
+<rect x="395" y="150" width="180" height="80" rx="10" fill="#111b2e" stroke="#34d399" stroke-width="2"/>
+<text x="485.0" y="172" text-anchor="middle" font-size="14" font-weight="700" fill="#34d399">INGEST</text>
+<text x="485.0" y="192" text-anchor="middle" font-size="12" fill="#e6edf7">POST/WS /ingest</text>
+<text x="485.0" y="208" text-anchor="middle" font-size="12" fill="#e6edf7">validate + normalize</text>
+<rect x="605" y="150" width="180" height="80" rx="10" fill="#111b2e" stroke="#34d399" stroke-width="2"/>
+<text x="695.0" y="172" text-anchor="middle" font-size="14" font-weight="700" fill="#34d399">STATE BUS</text>
+<text x="695.0" y="192" text-anchor="middle" font-size="12" fill="#e6edf7">last state per drone</text>
+<text x="695.0" y="208" text-anchor="middle" font-size="12" fill="#e6edf7">+ event stream</text>
+<rect x="815" y="150" width="180" height="80" rx="10" fill="#111b2e" stroke="#34d399" stroke-width="2"/>
+<text x="905.0" y="172" text-anchor="middle" font-size="14" font-weight="700" fill="#34d399">WS GATEWAY</text>
+<text x="905.0" y="192" text-anchor="middle" font-size="12" fill="#e6edf7">/live  ~10 Hz snapshots</text>
+<text x="905.0" y="208" text-anchor="middle" font-size="12" fill="#e6edf7">+ mission events</text>
+<rect x="395" y="280" width="180" height="110" rx="10" fill="#111b2e" stroke="#34d399" stroke-width="2"/>
+<text x="485.0" y="302" text-anchor="middle" font-size="14" font-weight="700" fill="#34d399">MISSION SERVICE</text>
+<text x="485.0" y="322" text-anchor="middle" font-size="12" fill="#e6edf7">FSM: PLANNED → RUNNING</text>
+<text x="485.0" y="338" text-anchor="middle" font-size="12" fill="#e6edf7">→ DONE | ABORTED</text>
+<text x="485.0" y="354" text-anchor="middle" font-size="12" fill="#e6edf7">route check: terrain</text>
+<text x="485.0" y="370" text-anchor="middle" font-size="12" fill="#e6edf7">+ NFZ polygons (PostGIS)</text>
+<rect x="605" y="280" width="180" height="110" rx="10" fill="#111b2e" stroke="#34d399" stroke-width="2"/>
+<text x="695.0" y="302" text-anchor="middle" font-size="14" font-weight="700" fill="#34d399">REST API</text>
+<text x="695.0" y="322" text-anchor="middle" font-size="12" fill="#e6edf7">GET /api/sites/:id</text>
+<text x="695.0" y="338" text-anchor="middle" font-size="12" fill="#e6edf7">POST /api/missions</text>
+<text x="695.0" y="354" text-anchor="middle" font-size="12" fill="#e6edf7">POST …/start | abort</text>
+<rect x="815" y="280" width="180" height="70" rx="10" fill="#111b2e" stroke="#34d399" stroke-width="2"/>
+<text x="905.0" y="302" text-anchor="middle" font-size="14" font-weight="700" fill="#34d399">BATCH WRITER</text>
+<text x="905.0" y="322" text-anchor="middle" font-size="12" fill="#e6edf7">COPY telemetry rows</text>
+<text x="905.0" y="338" text-anchor="middle" font-size="12" fill="#e6edf7">every ~1 s (batched)</text>
+<rect x="370" y="500" width="655" height="250" rx="14" fill="#fbbf24" fill-opacity="0.05" stroke="#fbbf24" stroke-opacity="0.6" stroke-width="1.5"/>
+<text x="386" y="524" font-size="13" font-weight="700" fill="#fbbf24" letter-spacing="1">DATABASE · PostgreSQL 17 + PostGIS + TimescaleDB</text>
+<text x="1009" y="738" text-anchor="end" font-size="11" fill="#8fa3bf">docker-compose · 127.0.0.1:5432</text>
+<rect x="395" y="550" width="55.0" height="34" rx="8" fill="#1a2438" stroke="#fbbf24" stroke-width="1.2"/>
+<text x="422.5" y="572" text-anchor="middle" font-size="12.5" fill="#e6edf7">sites</text>
+<rect x="505" y="550" width="104.19999999999999" height="34" rx="8" fill="#1a2438" stroke="#fbbf24" stroke-width="1.2"/>
+<text x="557.1" y="572" text-anchor="middle" font-size="12.5" fill="#e6edf7">site_layers</text>
+<rect x="650" y="550" width="112.39999999999999" height="34" rx="8" fill="#1a2438" stroke="#fbbf24" stroke-width="1.2"/>
+<text x="706.2" y="572" text-anchor="middle" font-size="12.5" fill="#e6edf7">no_fly_zones</text>
+<rect x="810" y="550" width="63.199999999999996" height="34" rx="8" fill="#1a2438" stroke="#fbbf24" stroke-width="1.2"/>
+<text x="841.6" y="572" text-anchor="middle" font-size="12.5" fill="#e6edf7">drones</text>
+<rect x="395" y="610" width="79.6" height="34" rx="8" fill="#1a2438" stroke="#fbbf24" stroke-width="1.2"/>
+<text x="434.8" y="632" text-anchor="middle" font-size="12.5" fill="#e6edf7">missions</text>
+<rect x="515" y="610" width="153.39999999999998" height="34" rx="8" fill="#1a2438" stroke="#fbbf24" stroke-width="1.2"/>
+<text x="591.7" y="632" text-anchor="middle" font-size="12.5" fill="#e6edf7">mission_waypoints</text>
+<rect x="705" y="610" width="194.39999999999998" height="34" rx="8" fill="#1a2438" stroke="#fbbf24" stroke-width="2.5"/>
+<text x="802.2" y="632" text-anchor="middle" font-size="12.5" fill="#e6edf7">telemetry (hypertable)</text>
+<text x="395" y="680" font-size="12" fill="#8fa3bf">site_layers: height grid, land cover, CAC formulas (JSONB), buildings</text>
+<text x="395" y="700" font-size="12" fill="#8fa3bf">no_fly_zones: PostGIS polygons, ST_Intersects(route, nfz) at mission start</text>
+<text x="395" y="720" font-size="12" fill="#8fa3bf">telemetry: ts, drone_id, lat, lon, alt, vel, heading, battery, state</text>
+<rect x="1090" y="100" width="285" height="330" rx="14" fill="#a78bfa" fill-opacity="0.05" stroke="#a78bfa" stroke-opacity="0.6" stroke-width="1.5"/>
+<text x="1106" y="124" font-size="13" font-weight="700" fill="#a78bfa" letter-spacing="1">FRONTEND · Three.js</text>
+<rect x="1110" y="150" width="245" height="250" rx="10" fill="#111b2e" stroke="#a78bfa" stroke-width="2"/>
+<text x="1232.5" y="172" text-anchor="middle" font-size="14" font-weight="700" fill="#a78bfa">index.html</text>
+<text x="1232.5" y="192" text-anchor="middle" font-size="12" fill="#e6edf7">?server=ws://localhost:3000</text>
+<text x="1232.5" y="208" text-anchor="middle" font-size="12" fill="#e6edf7"></text>
+<text x="1232.5" y="224" text-anchor="middle" font-size="12" fill="#e6edf7">map  ← GET /api/sites/:id</text>
+<text x="1232.5" y="240" text-anchor="middle" font-size="12" fill="#e6edf7">drones ← WS /live</text>
+<text x="1232.5" y="256" text-anchor="middle" font-size="12" fill="#e6edf7">HUD, map, FPV: unchanged</text>
+<text x="1232.5" y="272" text-anchor="middle" font-size="12" fill="#e6edf7">console: mission start|abort</text>
+<text x="1232.5" y="288" text-anchor="middle" font-size="12" fill="#e6edf7"></text>
+<text x="1232.5" y="304" text-anchor="middle" font-size="12" fill="#e6edf7">interpolates between frames</text>
+<text x="1232.5" y="320" text-anchor="middle" font-size="12" fill="#e6edf7">(local trails + orientation)</text>
+<rect x="1110" y="500" width="245" height="120" rx="10" fill="#111b2e" stroke="#64748b" stroke-width="2" stroke-dasharray="7 5"/>
+<text x="1232.5" y="522" text-anchor="middle" font-size="14" font-weight="700" fill="#64748b">OFFLINE MODE (today)</text>
+<text x="1232.5" y="542" text-anchor="middle" font-size="12" fill="#e6edf7">no ?server param → local sim</text>
+<text x="1232.5" y="558" text-anchor="middle" font-size="12" fill="#e6edf7">boids + avoidance in browser</text>
+<text x="1232.5" y="574" text-anchor="middle" font-size="12" fill="#e6edf7">GitHub Pages + embed keep working</text>
+<polyline points="300,170 395,170" fill="none" stroke="#64748b" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#ah)"/>
+<text x="366" y="162" text-anchor="end" font-size="11" fill="#8fa3bf" font-style="italic">telemetry</text>
+<polyline points="300,310 345,310 345,205 395,205" fill="none" stroke="#e6edf7" stroke-width="2" marker-end="url(#ah)"/>
+<text x="338" y="262" text-anchor="end" font-size="11" fill="#8fa3bf" font-style="italic">telemetry</text>
+<polyline points="395,345 300,345" fill="none" stroke="#e6edf7" stroke-width="2" marker-end="url(#ah)"/>
+<text x="366" y="337" text-anchor="end" font-size="11" fill="#8fa3bf" font-style="italic">MISSION mode</text>
+<polyline points="170,450 170,400" fill="none" stroke="#64748b" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#ah)"/>
+<polyline points="575,190 605,190" fill="none" stroke="#e6edf7" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="785,190 815,190" fill="none" stroke="#e6edf7" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="740,230 740,255 905,255 905,280" fill="none" stroke="#e6edf7" stroke-width="2" marker-end="url(#ah)"/>
+<text x="822" y="248" text-anchor="middle" font-size="11" fill="#8fa3bf" font-style="italic">subscribe</text>
+<polyline points="650,230 650,255 485,255 485,280" fill="none" stroke="#e6edf7" stroke-width="2" marker-end="url(#ah)"/>
+<text x="568" y="248" text-anchor="middle" font-size="11" fill="#8fa3bf" font-style="italic">progress</text>
+<polyline points="605,335 575,335" fill="none" stroke="#e6edf7" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="995,190 1110,190" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#ah)"/>
+<text x="1058" y="182" text-anchor="middle" font-size="11" fill="#8fa3bf" font-style="italic">WebSocket</text>
+<polyline points="785,372 1110,372" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#ah)" marker-start="url(#ah-r)"/>
+<text x="1058" y="364" text-anchor="middle" font-size="11" fill="#8fa3bf" font-style="italic">HTTP /api</text>
+<polyline points="485,390 485,500" fill="none" stroke="#fbbf24" stroke-width="2" marker-end="url(#ah)" marker-start="url(#ah-r)"/>
+<polyline points="695,390 695,500" fill="none" stroke="#fbbf24" stroke-width="2" marker-end="url(#ah)" marker-start="url(#ah-r)"/>
+<polyline points="905,350 905,500" fill="none" stroke="#fbbf24" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="1232,500 1232,400" fill="none" stroke="#64748b" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#ah)"/>
+<text x="495" y="445" font-size="11" fill="#8fa3bf" font-style="italic">missions, grid, NFZ</text>
+<text x="705" y="445" font-size="11" fill="#8fa3bf" font-style="italic">sites, layers</text>
+<text x="915" y="470" font-size="11" fill="#8fa3bf" font-style="italic">telemetry rows</text>
+<line x1="40" y1="775" x2="80" y2="775" stroke="#e6edf7" stroke-width="2" marker-end="url(#ah)"/><text x="90" y="779" font-size="12" fill="#8fa3bf">v1 data flow</text>
+<line x1="200" y1="775" x2="240" y2="775" stroke="#64748b" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#ah)"/><text x="250" y="779" font-size="12" fill="#8fa3bf">later / existing offline mode</text>
+<text x="1360" y="779" text-anchor="end" font-size="12" fill="#8fa3bf">sources: PostGIS / TimescaleDB / QuestDB docs, see docs/architecture.md</text>
+</svg>
